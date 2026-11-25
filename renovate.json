@@ -5,9 +5,21 @@
     "helpers:pinGitHubActionDigests"
   ],
   "timezone": "Europe/Budapest",
+  "constraints": {
+    "npm": ">=11.17.0"
+  },
   "schedule": ["* 0-5 * * 1"],
   "minimumReleaseAge": "7 days",
-  "prConcurrentLimit": 2,
+  "prConcurrentLimit": 5,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "description": "Weekly package-lock.json refresh: the only way transitive npm dependencies (e.g. fast-xml-parser under @azure/storage-blob) get updated. The repo .npmrc (min-release-age=7) applies the same 7-day age gate to every transitive package npm resolves, which minimumReleaseAge alone does not. Reviewed by hand like any image input; merging it releases a new image."
+  },
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "Security fixes from OSV open immediately, ignoring the weekly schedule and the 7-day release age (Renovate's vulnerability defaults); still reviewed by hand.",
+    "labels": ["security"]
+  },
   "packageRules": [
     {
       "description": "Anything baked into the refresh image releases a new image on merge (auto-release.yml). Reviewed by hand, never automerged; the deploy follows through the automerged image-pin PR below.",

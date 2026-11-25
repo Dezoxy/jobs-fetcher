@@ -31,10 +31,9 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 JOB_TYPE = "azurerm_container_app_job"
-# Same pattern as the `image` variable in infra/azure/variables.tf. The old
-# jobs-dashboard package stays valid only until the first jobs-fetcher pin.
+# Same pattern as the `image` variable in infra/azure/variables.tf.
 IMAGE_RE = re.compile(
-    r"ghcr\.io/dezoxy/jobs-(?:fetcher|dashboard)@sha256:[0-9a-f]{64}"
+    r"ghcr\.io/dezoxy/jobs-fetcher@sha256:[0-9a-f]{64}"
 )
 # Release image tag without the leading v (release.yml pushes `:${tag#v}`).
 VERSION_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")

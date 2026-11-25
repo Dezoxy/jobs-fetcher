@@ -3,8 +3,8 @@
 GitHub Actions publishes the private image to GHCR using its short-lived
 `GITHUB_TOKEN`. Azure access uses OIDC through `azure/login@v3` and Terraform's
 `ARM_USE_OIDC=true`. No SSH session or Azure client secret is needed to ship an
-image. The Azure jobs still use their existing Key Vault registry pull token;
-their SSH deploy keys are for GitHub code/data access, not Azure deployment.
+image. The image is public, so the Azure jobs pull it anonymously, with no
+registry credential; their SSH deploy keys are for GitHub code/data access, not Azure deployment.
 
 ## Release and deploy
 
@@ -123,15 +123,19 @@ local `production.auto.tfvars`: Terraform auto-loads it, and a stale copy once
 planned the removal of every `ANTHROPIC_FEDERATION_*` setting. Plan from a
 clean worktree of `origin/main` with the reviewed variable as the only var file:
 
-GitHub secrets cannot be read back, so the readable operator copy of
-`AZURE_TERRAFORM_VARS_JSON` is the same-named variable in the private
-`Dezoxy/jobs-dashboard` archive's `azure-production` environment. Change both
+GitHub secrets cannot be read back. The readable operator copy of
+`AZURE_TERRAFORM_VARS_JSON` is the blob `operator/terraform-vars.json` next to
+the state, in the backend container. The operator already has data access there
+(Entra auth), the GitHub deploy identity already holds the same values, and the
+jobs' identities cannot read it. Keeping it out of the jobs' Key Vault matters
+because the runner may read every secret in that vault. Change both copies
 together.
 
 ```bash
 git worktree add --detach /tmp/jd-op origin/main
 cp infra/azure/backend.hcl /tmp/jd-op/infra/azure/
-gh variable get AZURE_TERRAFORM_VARS_JSON --env azure-production --repo Dezoxy/jobs-dashboard > /tmp/jd-op/reviewed.tfvars.json
+az storage blob download --auth-mode login --account-name "$(sed -n 's/^storage_account_name *= *"\(.*\)"/\1/p' infra/azure/backend.hcl)" \
+  --container-name terraform-state --name operator/terraform-vars.json --file /tmp/jd-op/reviewed.tfvars.json --output none
 chmod 600 /tmp/jd-op/reviewed.tfvars.json
 terraform -chdir=/tmp/jd-op/infra/azure init -backend-config=backend.hcl -input=false -lockfile=readonly
 terraform -chdir=/tmp/jd-op/infra/azure plan -input=false -var-file=../../reviewed.tfvars.json -out=/tmp/jd-op.tfplan
@@ -188,8 +192,8 @@ login remains usable locally.
 Deployment helpers live in `.github/scripts/`, outside the container's verified
 runtime source. Changing CI or the image pin does not introduce executable drift
 into the current refresh image. Azure workloads and their state stay in West
-Europe; the existing GHCR/GitHub processor boundary and registry pull credential
-remain. No Azure Container Registry or other billed service is added.
+Europe; GitHub and GHCR remain the code and image processors. The jobs hold no
+registry credential. No Azure Container Registry or other billed service is added.
 
 ## GitHub credential inventory
 

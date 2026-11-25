@@ -23,7 +23,7 @@ def load(name):
 
 guard = load("azure_release_guard")
 config = load("azure_deploy_config")
-OLD = "ghcr.io/dezoxy/jobs-dashboard@sha256:" + "1" * 64
+OLD = "ghcr.io/dezoxy/jobs-fetcher@sha256:" + "1" * 64
 NEW = "ghcr.io/dezoxy/jobs-fetcher@sha256:" + "2" * 64
 SUB = "00000000-0000-0000-0000-000000000000"
 
@@ -80,7 +80,8 @@ class ImageGuardTests(unittest.TestCase):
                     guard.check_plan(value, NEW)
 
     def test_wrong_registry_tag_or_pin_refused(self):
-        for image in ("ghcr.io/dezoxy/jobs-dashboard:1.0.1", "ghcr.io/dezoxy/other@sha256:" + "2" * 64, OLD):
+        for image in ("ghcr.io/dezoxy/jobs-dashboard:1.0.1", "ghcr.io/dezoxy/other@sha256:" + "2" * 64,
+                      "ghcr.io/dezoxy/jobs-dashboard@sha256:" + "2" * 64, OLD):  # archived package (ADR 9)
             with self.subTest(image=image), self.assertRaises(guard.GuardError):
                 guard.check_plan(plan(), image)
 
@@ -111,9 +112,6 @@ class ImageGuardTests(unittest.TestCase):
         self.assertEqual(len(managers), 1)
         pattern = re.sub(r"\(\?<(\w+)>", r"(?P<\1>", managers[0]["matchStrings"][0])
         text = (ROOT / "infra/azure/image.auto.tfvars.json").read_text()
-        # Until the first jobs-fetcher pin (ADR 9) production still runs the old
-        # package, which Renovate no longer tracks; check the format on the new name.
-        text = text.replace("ghcr.io/dezoxy/jobs-dashboard@", "ghcr.io/dezoxy/jobs-fetcher@")
         match = re.search(pattern, text)
         self.assertIsNotNone(match)
         pin = json.loads(text)

@@ -49,16 +49,17 @@ and fails closed when its required lines are missing.
 ## Consequences
 
 - The Actions minutes are free, and the old history stays private.
-- Until the first `jobs-fetcher` pin, the validators (`variables.tf`,
-  `azure_release_guard.py`) accept both package names. The deploy binding
-  check already requires `jobs-fetcher`, because a release tag must exist in
-  this repository. Once the pin moves, narrow the validators to
-  `jobs-fetcher`.
-- The image-pin freshness check fails six hours after the first
-  `jobs-fetcher` release, until that first pin is merged. That is the
-  intended signal.
+- The image package is public: a package linked to a public repository by
+  `org.opencontainers.image.source` takes its visibility. It holds only what
+  this repository already publishes, plus public npm, pip and Debian packages.
+  The jobs therefore pull it anonymously, and the read:packages pull token and
+  the `ghcr_username` setting were retired.
+- The cutover took one reviewed pin, `jobs-fetcher` 2026.11.0. Its image inputs
+  were identical to `jobs-dashboard` v2026.11.8. After it, the validators
+  (`variables.tf`, `azure_release_guard.py`) accept only `jobs-fetcher`.
 - GitHub secrets cannot be read back. The readable operator copy of the
-  Terraform values stays in the archive repository's environment variables.
-  It must be updated together with this repository's secrets.
+  Terraform values is `operator/terraform-vars.json` in the state container,
+  which the jobs' identities cannot read. It must be updated together with
+  this repository's secret.
 - Pull request links written before the move (`jobs-dashboard PR #NN`) point
   to the private archive.

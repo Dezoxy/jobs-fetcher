@@ -15,7 +15,7 @@
 import { checkAccess, makeKeyStore } from "./access.js";
 import { readCapped } from "./body.js";
 import {
-  DELETE_ALL_SQL, INSERT_FROM_JSON_SQL, MAX_BYTES, READY_SQL, SELECT_DOC_SQL, sanitize,
+  DELETE_MISSING_SQL, MAX_BYTES, READY_SQL, SELECT_DOC_SQL, UPSERT_CHANGED_SQL, sanitize,
 } from "./tracker.js";
 import {
   INSERT_CANDIDATES_SQL, MAX_EMAIL_BYTES, extractLinkedInJobIds, fromDomain,
@@ -125,9 +125,10 @@ async function putTracker(request, env) {
     return notReady();
   }
   // One batch = one transaction: readers never see a half-replaced table.
+  const doc = JSON.stringify(clean);
   await env.TRACKER_DB.batch([
-    env.TRACKER_DB.prepare(DELETE_ALL_SQL),
-    env.TRACKER_DB.prepare(INSERT_FROM_JSON_SQL).bind(JSON.stringify(clean)),
+    env.TRACKER_DB.prepare(DELETE_MISSING_SQL).bind(doc),
+    env.TRACKER_DB.prepare(UPSERT_CHANGED_SQL).bind(doc),
   ]);
   return json({ ok: true, entries: Object.keys(clean).length });
 }

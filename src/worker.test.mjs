@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 
 import { asciiEmail, authorize, checkAccess, makeKeyStore, parseList, verifyAccessJwt } from "./access.js";
 import { readCapped } from "./body.js";
-import { INSERT_FROM_JSON_SQL, DELETE_ALL_SQL, READY_SQL, SELECT_DOC_SQL, sanitize } from "./tracker.js";
+import { DELETE_MISSING_SQL, UPSERT_CHANGED_SQL, READY_SQL, SELECT_DOC_SQL, sanitize } from "./tracker.js";
 import {
   INSERT_CANDIDATES_SQL, MAX_IDS_PER_EMAIL, decodeForLinks, extractLinkedInJobIds, fromDomain,
   hasLinkedInDmarcPass, parseCloudflareAuthResults,
@@ -559,7 +559,7 @@ describe("worker.fetch", () => {
     }
   });
 
-  test("PUT: origin and content-type checks, then one batch with ONE bound parameter", async () => {
+  test("PUT: origin and content-type checks, then one diff batch binding the map once per statement", async () => {
     const env = baseEnv();
     const token = await ownerToken();
     const body = JSON.stringify({ "li-1": { st: "applied", at: "2026-11-24T10:00:00.000Z" } });
@@ -574,8 +574,8 @@ describe("worker.fetch", () => {
     assert.equal(ok.status, 200);
     assert.deepEqual(await ok.json(), { ok: true, entries: 1 });
     const [b] = batches(env.TRACKER_DB);
-    assert.deepEqual(b.stmts.map((s) => s.sql), [DELETE_ALL_SQL, INSERT_FROM_JSON_SQL]);
-    assert.deepEqual(b.stmts[1].params, [body]);
+    assert.deepEqual(b.stmts.map((s) => s.sql), [DELETE_MISSING_SQL, UPSERT_CHANGED_SQL]);
+    assert.deepEqual(b.stmts.map((s) => s.params), [[body], [body]]);
 
     assert.equal((await put({ "Content-Type": "application/json" })).status, 200, "no Origin header (non-browser) is fine");
   });

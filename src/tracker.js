@@ -36,10 +36,22 @@ export const SELECT_DOC_SQL =
   "SELECT (" + READY_SQL + ") AS ready, " +
   "(SELECT json_group_object(id, json_object('st', st, 'at', at)) FROM tracker) AS doc";
 
-export const DELETE_ALL_SQL = "DELETE FROM tracker";
+// PUT still replaces the whole map, but writes only the difference. D1 bills
+// every row (and its primary-key index entry) a statement writes, so the old
+// DELETE-all + INSERT-all cost ~5,000 rows written per click on a ~1,700-row
+// tracker and spent the Free plan's 100,000/day in one evening (2026-11-25).
+//
+// Both statements take the same one bound parameter: the sanitised map as
+// JSON. json_each over an object yields one row per id (key) with the entry
+// as JSON (value). Run them in one batch (one transaction).
+export const DELETE_MISSING_SQL =
+  "DELETE FROM tracker WHERE id NOT IN (SELECT key FROM json_each(?1))";
 
-// One bound parameter: the sanitised map as JSON. json_each over an object
-// yields one row per id (key) with the entry as JSON (value).
-export const INSERT_FROM_JSON_SQL =
+// `WHERE true` resolves SQLite's parse ambiguity between a SELECT's join
+// clause and ON CONFLICT. The DO UPDATE's WHERE makes an unchanged row a
+// no-op, which writes nothing.
+export const UPSERT_CHANGED_SQL =
   "INSERT INTO tracker (id, st, at) " +
-  "SELECT key, json_extract(value, '$.st'), json_extract(value, '$.at') FROM json_each(?1)";
+  "SELECT key, json_extract(value, '$.st'), json_extract(value, '$.at') FROM json_each(?1) WHERE true " +
+  "ON CONFLICT (id) DO UPDATE SET st = excluded.st, at = excluded.at " +
+  "WHERE tracker.st IS NOT excluded.st OR tracker.at IS NOT excluded.at";

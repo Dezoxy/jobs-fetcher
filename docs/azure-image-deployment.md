@@ -11,7 +11,10 @@ registry credential; their SSH deploy keys are for GitHub code/data access, not 
 1. Merge a PR into `main` that changes refresh-image inputs:
    `Dockerfile`, `.dockerignore`, `scripts/**`, `runtime/**`,
    `docs/judge-prompt.md`, `package.json` or `package-lock.json`.
-   [auto-release.yml](../.github/workflows/auto-release.yml) runs the full
+   [auto-release.yml](../.github/workflows/auto-release.yml) first waits 30
+   minutes in the `release-batch` environment; a newer merge restarts the
+   wait, so merges less than 30 minutes apart become one release of the newest
+   commit. It then runs the full
    application validation workflow, then creates the next CalVer version
    `vYYYY.M.N` (UTC year, unpadded month, per-month counter from 0; for example
    `v2026.11.0` → `v2026.11.1`, then `v2026.12.0`; the scheme notification-digest
@@ -76,7 +79,8 @@ pin fails closed at the binding check.
 A version tag pushed by hand is built by `release.yml`, and Renovate pins it
 like any other release. Azure deployment also supports the retry/plan
 operations below. Re-run a failed automatic Actions run to reuse its source commit and version. To request
-a fresh automatic release of the latest `main` explicitly:
+a fresh automatic release of the latest `main` explicitly (this skips the
+30-minute batch window):
 
 ```bash
 gh workflow run auto-release.yml --repo Dezoxy/jobs-fetcher --ref main

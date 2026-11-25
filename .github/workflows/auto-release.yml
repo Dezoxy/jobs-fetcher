@@ -7,6 +7,14 @@ name: Automatic refresh release
 # CI is green, and that push to main runs azure-deploy.yml, whose guard accepts
 # only an image-only plan and waits for idle jobs. The pin file is outside the
 # path filter below, so a pin bump never cuts a release.
+#
+# Batching: a push waits 30 minutes in the `release-batch` environment (a
+# wait timer, which uses no runner minutes) before anything else runs. A newer
+# push cancels the waiting one, so merges less than 30 minutes apart become
+# ONE release of the newest commit, and one deploy. Only the wait is
+# cancellable: once validation starts, the run finishes, and a merge that lands
+# meanwhile starts its own window. workflow_dispatch skips the wait (urgent
+# release of the latest main).
 
 on:
   push:
@@ -24,18 +32,35 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: jobs-dashboard-auto-release
-  cancel-in-progress: false
-
 jobs:
+  debounce:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release-batch
+    concurrency:
+      group: jobs-fetcher-auto-release-debounce
+      cancel-in-progress: true
+    steps:
+      - run: echo "No newer merge within the batch window; releasing $GITHUB_SHA."
+
   validate:
-    if: github.ref == 'refs/heads/main'
+    needs: debounce
+    # Runs after the window, or at once for workflow_dispatch (debounce skipped).
+    # A cancelled window (a newer push took over) skips the rest of this run.
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (needs.debounce.result == 'success' || needs.debounce.result == 'skipped')
+    concurrency:
+      group: jobs-fetcher-auto-release-build
+      cancel-in-progress: false
     uses: ./.github/workflows/azure-application.yml
 
   tag:
     needs: validate
     runs-on: ubuntu-latest
+    concurrency:
+      group: jobs-fetcher-auto-release-tag
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:

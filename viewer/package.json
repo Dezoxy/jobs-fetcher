@@ -1,0 +1,22 @@
+{
+  "name": "architecture-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders the Structurizr workspace in docs/architecture/ as an interactive web page.",
+  "scripts": {
+    "workspace": "make -C .. viewer-workspace",
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "elkjs": "0.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}

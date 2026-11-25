@@ -1,0 +1,49 @@
+name: Viewer
+
+# Type-checks, tests and builds viewer/, the web renderer for the Structurizr
+# workspace. It also lays out every view of the real workspace, so a model
+# change that the viewer cannot draw fails here. Not an image input: nothing
+# in viewer/ reaches the refresh image or the Worker.
+on:
+  pull_request:
+    paths: ['viewer/**', 'docs/architecture/**', 'Makefile', '.github/workflows/viewer.yml']
+  push:
+    branches: [main]
+    paths: ['viewer/**', 'docs/architecture/**', 'Makefile', '.github/workflows/viewer.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  viewer:
+    name: viewer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: viewer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Read Node pin
+        id: versions
+        working-directory: .
+        run: |
+          source runtime/versions.env
+          echo "node=$(echo "$NODE_IMAGE" | cut -d: -f2 | cut -d- -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Export the workspace with the pinned Structurizr image
+        run: npm run workspace
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

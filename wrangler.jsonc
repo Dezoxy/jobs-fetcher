@@ -14,7 +14,7 @@
   //   RUNNER_CLIENT_ID  Access service-token Client ID of the refresh runner
   //                     (the JWT's common_name, including the ".access" suffix)
   //   FORWARD_TO        optional: owner inbox that receives a copy of every
-  //                     LinkedIn mail to the alert address (a verified Email
+  //                     verified LinkedIn mail to the alert address (a verified Email
   //                     Routing destination); unset = ingest only
   //
   // Terraform boundary: this script is owned by Workers Builds.

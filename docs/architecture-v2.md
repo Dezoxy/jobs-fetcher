@@ -223,8 +223,8 @@ never committed.
    It never throws, because a throw would bounce the alert.
 
 A LinkedIn mail without job links is not ingested. The body is never stored or
-replied to. When the `FORWARD_TO` Worker secret is set, every LinkedIn mail is
-then forwarded untouched to the owner's inbox ([ADR 6](architecture/decisions/0006-ingest-linkedin-alert-emails.md), step 5).
+replied to. When the `FORWARD_TO` Worker secret is set, every verified LinkedIn mail
+is then forwarded untouched to the owner's inbox ([ADR 6](architecture/decisions/0006-ingest-linkedin-alert-emails.md), step 5).
 
 ## Judge contract (`scripts/v2/judge.mjs`)
 

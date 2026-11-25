@@ -747,12 +747,11 @@ describe("worker.email", () => {
     assert.deepEqual(m.forwarded, []);
   });
 
-  test("with FORWARD_TO every LinkedIn mail is forwarded after ingestion; rejected senders are not", async () => {
+  test("with FORWARD_TO verified LinkedIn mail is forwarded after ingestion; unverified and rejected mail is not", async () => {
     const FORWARD_TO = "owner@inbox.example";
     const cases = [
       ["alert", {}, "https://www.linkedin.com/jobs/view/4012345678", 1],
       ["no links", {}, "You have a new message from a recruiter", 0],
-      ["unverified", { auth: "mx.cloudflare.net; dmarc=fail header.from=linkedin.com" }, "https://www.linkedin.com/jobs/view/4012345678", 0],
     ];
     for (const [name, opts, body, inserts] of cases) {
       const JOBS_DB = fakeD1();
@@ -762,6 +761,13 @@ describe("worker.email", () => {
       assert.equal(JOBS_DB.calls.length, inserts, name);
       assert.equal(JSON.parse(lines.at(-1)).event, "email_forwarded", name);
       assert.ok(!lines.join("").includes("@"), name);
+    }
+    for (const auth of ["mx.cloudflare.net; dmarc=fail header.from=linkedin.com", null]) {
+      const spoof = message({ auth, body: "https://www.linkedin.com/jobs/view/4012345678" });
+      const { lines } = await captureLogs(() => worker.email(spoof, { JOBS_DB: fakeD1(), FORWARD_TO }));
+      assert.deepEqual(spoof.forwarded, [], String(auth));
+      assert.equal(spoof.rejected, null);
+      assert.deepEqual(lines.map(l => JSON.parse(l).event), ["email_unverified"]);
     }
     const spam = message({ from: "a@evil.example", body: "x" });
     await captureLogs(() => worker.email(spam, { JOBS_DB: fakeD1(), FORWARD_TO }));

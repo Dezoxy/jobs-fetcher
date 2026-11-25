@@ -144,11 +144,24 @@ export default {
       message.setReject("Sender not accepted");
       return;
     }
-    // Ingestion trusts only Cloudflare's DMARC verdict and never throws (a
-    // throw bounces the message back to LinkedIn). Forwarding comes after it
-    // and trusts nothing, so unverified and link-free LinkedIn mail (recruiter
-    // InMail notices, security notices) still reaches the owner's inbox, which
-    // runs its own checks on the ARC-sealed copy.
+    // Claims to be LinkedIn but is not verified: neither ingested nor
+    // forwarded, and not bounced. A reject would tell a spoofer what passes,
+    // and bouncing a real LinkedIn alert (if Cloudflare's header format ever
+    // changes) risks LinkedIn disabling the address. linkedin.com enforces
+    // DMARC, so direct LinkedIn mail passes; forwarding failures would relay
+    // spoofs into the owner's inbox.
+    const auth = parseCloudflareAuthResults(message.headers.get("authentication-results"));
+    if (!auth.ok || !hasLinkedInDmarcPass(auth.results)) {
+      log({
+        event: "email_unverified",
+        reason: auth.ok ? "dmarc" : auth.reason,
+        verdicts: auth.ok ? verdictTokens(auth.results) : "",
+      });
+      return;
+    }
+    // Ingestion never throws (a throw bounces the message back to LinkedIn)
+    // and never prevents the forward, so verified mail without job links
+    // (recruiter InMail notices, security notices) still reaches the owner.
     try {
       await ingestAlert(message, env);
     } catch (e) {
@@ -179,21 +192,8 @@ async function forwardCopy(message, env) {
 const redactAddresses = (e) =>
   String(e?.message ?? e).replace(/[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g, "<address>").slice(0, 200);
 
+// Called only for verified LinkedIn mail.
 async function ingestAlert(message, env) {
-  // Claims to be LinkedIn but is not verified: not ingested, and no bounce. A
-  // reject would tell a spoofer what passes, and bouncing a real LinkedIn
-  // alert (if Cloudflare's header format ever changes) risks LinkedIn
-  // disabling the address.
-  const auth = parseCloudflareAuthResults(message.headers.get("authentication-results"));
-  if (!auth.ok || !hasLinkedInDmarcPass(auth.results)) {
-    log({
-      event: "email_unverified",
-      reason: auth.ok ? "dmarc" : auth.reason,
-      verdicts: auth.ok ? verdictTokens(auth.results) : "",
-    });
-    return;
-  }
-
   const { text, truncated } = await readCapped(message.raw, MAX_EMAIL_BYTES);
   const ids = extractLinkedInJobIds(text);
   if (ids.length === 0) {

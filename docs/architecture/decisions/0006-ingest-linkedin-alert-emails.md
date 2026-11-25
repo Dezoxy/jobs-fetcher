@@ -56,11 +56,11 @@ handler:
    `INSERT OR IGNORE` into `email_candidates`. The body is never stored or
    answered.
 5. Amended 2026-11-25: when the `FORWARD_TO` Worker secret is set, every
-   message that passed step 1 is forwarded untouched to that verified Email
-   Routing destination after step 4, whether or not it was verified or had job
-   links. Forwarding trusts nothing in the message; the receiving inbox applies
-   its own checks to the ARC-sealed copy. A forward failure is logged with
-   addresses redacted and is never thrown.
+   message that passed steps 1 and 2 is forwarded untouched to that verified
+   Email Routing destination after step 4, with or without job links. Mail
+   that fails step 2 is never forwarded: linkedin.com enforces DMARC, so it is
+   almost certainly a spoof, and relaying it would deliver phishing to the
+   owner. A forward failure is logged with addresses redacted and never thrown.
 
 The runner fetches each new id's guest detail page and treats it like any other
 candidate. An id is consumed once decided, or after 7 days.

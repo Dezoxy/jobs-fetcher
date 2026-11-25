@@ -53,8 +53,14 @@ handler:
    bounce real alerts.
 4. At most 512 KB of the raw message is read; only `https` LinkedIn
    `jobs/view/<digits>` links count, at most 200 ids, inserted with
-   `INSERT OR IGNORE` into `email_candidates`. The body is never stored,
-   forwarded or answered.
+   `INSERT OR IGNORE` into `email_candidates`. The body is never stored or
+   answered.
+5. Amended 2026-11-25: when the `FORWARD_TO` Worker secret is set, every
+   message that passed step 1 is forwarded untouched to that verified Email
+   Routing destination after step 4, whether or not it was verified or had job
+   links. Forwarding trusts nothing in the message; the receiving inbox applies
+   its own checks to the ARC-sealed copy. A forward failure is logged with
+   addresses redacted and is never thrown.
 
 The runner fetches each new id's guest detail page and treats it like any other
 candidate. An id is consumed once decided, or after 7 days.
@@ -72,7 +78,11 @@ Positive:
 Negative / accepted trade-offs:
 
 - A forwarded alert fails verification (the SPF comment carries an SRS sender)
-  and is dropped. Alerts must arrive directly.
+  and is not ingested. Alerts must arrive directly, and LinkedIn sends job
+  alerts only to the account's primary e-mail, so the alert address (kept
+  out of this public repo) is the LinkedIn primary. Step 5 keeps the
+  owner's other LinkedIn mail (recruiter InMail notices, security notices)
+  reaching their inbox.
 - The handler depends on Email Routing's header format; a change shows as
   `email_unverified` log lines, not as an error.
 - One more inbound path into the Worker, covered in the

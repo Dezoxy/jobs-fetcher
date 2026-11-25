@@ -661,8 +661,9 @@ describe("worker.email", () => {
       raw: new Response(bytes).body,
       rawSize: bytes.length,
       rejected: null,
+      forwarded: [],
       setReject(reason) { this.rejected = reason; },
-      forward() { throw new Error("must never forward"); },
+      async forward(to) { this.forwarded.push(to); },
       reply() { throw new Error("must never reply"); },
     };
     return m;
@@ -738,5 +739,59 @@ describe("worker.email", () => {
     await captureLogs(() => worker.email(m, { JOBS_DB }));
     assert.equal(m.rejected, null);
     assert.equal(JOBS_DB.calls.length, 0);
+  });
+
+  test("without FORWARD_TO nothing is forwarded", async () => {
+    const m = message({ body: "https://www.linkedin.com/jobs/view/4012345678" });
+    await captureLogs(() => worker.email(m, { JOBS_DB: fakeD1() }));
+    assert.deepEqual(m.forwarded, []);
+  });
+
+  test("with FORWARD_TO every LinkedIn mail is forwarded after ingestion; rejected senders are not", async () => {
+    const FORWARD_TO = "owner@inbox.example";
+    const cases = [
+      ["alert", {}, "https://www.linkedin.com/jobs/view/4012345678", 1],
+      ["no links", {}, "You have a new message from a recruiter", 0],
+      ["unverified", { auth: "mx.cloudflare.net; dmarc=fail header.from=linkedin.com" }, "https://www.linkedin.com/jobs/view/4012345678", 0],
+    ];
+    for (const [name, opts, body, inserts] of cases) {
+      const JOBS_DB = fakeD1();
+      const m = message({ ...opts, body });
+      const { lines } = await captureLogs(() => worker.email(m, { JOBS_DB, FORWARD_TO }));
+      assert.deepEqual(m.forwarded, [FORWARD_TO], name);
+      assert.equal(JOBS_DB.calls.length, inserts, name);
+      assert.equal(JSON.parse(lines.at(-1)).event, "email_forwarded", name);
+      assert.ok(!lines.join("").includes("@"), name);
+    }
+    const spam = message({ from: "a@evil.example", body: "x" });
+    await captureLogs(() => worker.email(spam, { JOBS_DB: fakeD1(), FORWARD_TO }));
+    assert.ok(spam.rejected); assert.deepEqual(spam.forwarded, []);
+  });
+
+  test("a failed store or a failed read still forwards", async () => {
+    const FORWARD_TO = "owner@inbox.example";
+    const m = message({ body: "https://www.linkedin.com/jobs/view/4012345678" });
+    await captureLogs(() => worker.email(m, { JOBS_DB: fakeD1({ fail: true }), FORWARD_TO }));
+    assert.deepEqual(m.forwarded, [FORWARD_TO]);
+    const broken = message({ body: "x" });
+    broken.raw = new ReadableStream({ pull(c) { c.error(new Error("stream reset by a@b.example")); } });
+    const { lines } = await captureLogs(() => worker.email(broken, { JOBS_DB: fakeD1(), FORWARD_TO }));
+    assert.deepEqual(broken.forwarded, [FORWARD_TO]);
+    const failed = lines.map(l => JSON.parse(l)).find(l => l.event === "email_ingest_failed");
+    assert.equal(failed.error, "stream reset by <address>");
+  });
+
+  test("a forward failure is logged without addresses and never thrown; unforwardable mail is skipped", async () => {
+    const m = message({ body: "Your weekly summary" });
+    m.forward = async () => { throw new Error("destination owner@inbox.example is not verified"); };
+    const { lines } = await captureLogs(() => worker.email(m, { JOBS_DB: fakeD1(), FORWARD_TO: "owner@inbox.example" }));
+    assert.equal(m.rejected, null);
+    const entry = JSON.parse(lines.at(-1));
+    assert.equal(entry.event, "email_forward_failed");
+    assert.equal(entry.error, "destination <address> is not verified");
+    const n = message({ body: "x" }); n.canBeForwarded = false;
+    const r = await captureLogs(() => worker.email(n, { JOBS_DB: fakeD1(), FORWARD_TO: "owner@inbox.example" }));
+    assert.deepEqual(n.forwarded, []);
+    assert.equal(JSON.parse(r.lines.at(-1)).event, "email_forward_skipped");
   });
 });

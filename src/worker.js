@@ -144,38 +144,73 @@ export default {
       message.setReject("Sender not accepted");
       return;
     }
-    // Claims to be LinkedIn but is not verified: drop without a bounce. A
-    // reject would tell a spoofer what passes, and bouncing a real LinkedIn
-    // alert (if Cloudflare's header format ever changes) risks LinkedIn
-    // disabling the address.
-    const auth = parseCloudflareAuthResults(message.headers.get("authentication-results"));
-    if (!auth.ok || !hasLinkedInDmarcPass(auth.results)) {
-      log({
-        event: "email_unverified",
-        reason: auth.ok ? "dmarc" : auth.reason,
-        verdicts: auth.ok ? verdictTokens(auth.results) : "",
-      });
-      return;
-    }
-
-    const { text, truncated } = await readCapped(message.raw, MAX_EMAIL_BYTES);
-    const ids = extractLinkedInJobIds(text);
-    if (ids.length === 0) {
-      // A genuine LinkedIn mail without job links (e.g. a notice): drop it
-      // quietly rather than bounce LinkedIn.
-      log({ event: "email_no_ids", size: message.rawSize, truncated });
-      return;
-    }
-    let res;
+    // Ingestion trusts only Cloudflare's DMARC verdict and never throws (a
+    // throw bounces the message back to LinkedIn). Forwarding comes after it
+    // and trusts nothing, so unverified and link-free LinkedIn mail (recruiter
+    // InMail notices, security notices) still reaches the owner's inbox, which
+    // runs its own checks on the ARC-sealed copy.
     try {
-      res = await env.JOBS_DB.prepare(INSERT_CANDIDATES_SQL)
-        .bind(new Date().toISOString(), JSON.stringify(ids))
-        .run();
+      await ingestAlert(message, env);
     } catch (e) {
-      // Never throw from here: a throw bounces the alert back to LinkedIn.
-      log({ event: "email_store_failed", ids: ids.length, error: String(e?.message ?? e).slice(0, 200) });
-      return;
+      log({ event: "email_ingest_failed", error: redactAddresses(e) });
     }
-    log({ event: "email_ingested", ids: ids.length, inserted: res?.meta?.changes ?? null, truncated });
+    await forwardCopy(message, env);
   },
 };
+
+// FORWARD_TO is a Worker secret (the owner's inbox, a verified Email Routing
+// destination). Unset means ingest only, the behaviour before forwarding.
+async function forwardCopy(message, env) {
+  if (!env.FORWARD_TO) return;
+  if (message.canBeForwarded === false) {
+    log({ event: "email_forward_skipped", reason: "not_forwardable" });
+    return;
+  }
+  try {
+    await message.forward(env.FORWARD_TO);
+    log({ event: "email_forwarded" });
+  } catch (e) {
+    log({ event: "email_forward_failed", error: redactAddresses(e) });
+  }
+}
+
+// Logs never carry an address: error text from the platform may name the
+// destination or the sender.
+const redactAddresses = (e) =>
+  String(e?.message ?? e).replace(/[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g, "<address>").slice(0, 200);
+
+async function ingestAlert(message, env) {
+  // Claims to be LinkedIn but is not verified: not ingested, and no bounce. A
+  // reject would tell a spoofer what passes, and bouncing a real LinkedIn
+  // alert (if Cloudflare's header format ever changes) risks LinkedIn
+  // disabling the address.
+  const auth = parseCloudflareAuthResults(message.headers.get("authentication-results"));
+  if (!auth.ok || !hasLinkedInDmarcPass(auth.results)) {
+    log({
+      event: "email_unverified",
+      reason: auth.ok ? "dmarc" : auth.reason,
+      verdicts: auth.ok ? verdictTokens(auth.results) : "",
+    });
+    return;
+  }
+
+  const { text, truncated } = await readCapped(message.raw, MAX_EMAIL_BYTES);
+  const ids = extractLinkedInJobIds(text);
+  if (ids.length === 0) {
+    // A genuine LinkedIn mail without job links (e.g. a notice): nothing to
+    // ingest. It is still forwarded when FORWARD_TO is set.
+    log({ event: "email_no_ids", size: message.rawSize, truncated });
+    return;
+  }
+  let res;
+  try {
+    res = await env.JOBS_DB.prepare(INSERT_CANDIDATES_SQL)
+      .bind(new Date().toISOString(), JSON.stringify(ids))
+      .run();
+  } catch (e) {
+    // Never throw from here: a throw bounces the alert back to LinkedIn.
+    log({ event: "email_store_failed", ids: ids.length, error: String(e?.message ?? e).slice(0, 200) });
+    return;
+  }
+  log({ event: "email_ingested", ids: ids.length, inserted: res?.meta?.changes ?? null, truncated });
+}

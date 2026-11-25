@@ -5,12 +5,15 @@
     "helpers:pinGitHubActionDigests"
   ],
   "timezone": "Europe/Budapest",
+  "constraints": {
+    "npm": ">=11.17.0"
+  },
   "schedule": ["* 0-5 * * 1"],
   "minimumReleaseAge": "7 days",
   "prConcurrentLimit": 5,
   "lockFileMaintenance": {
     "enabled": true,
-    "description": "Weekly package-lock.json refresh: the only way transitive npm dependencies (e.g. fast-xml-parser under @azure/storage-blob) get updated. Reviewed by hand like any image input; merging it releases a new image."
+    "description": "Weekly package-lock.json refresh: the only way transitive npm dependencies (e.g. fast-xml-parser under @azure/storage-blob) get updated. The repo .npmrc (min-release-age=7) applies the same 7-day age gate to every transitive package npm resolves, which minimumReleaseAge alone does not. Reviewed by hand like any image input; merging it releases a new image."
   },
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {

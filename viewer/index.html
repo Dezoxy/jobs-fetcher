@@ -4,21 +4,24 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Architecture viewer</title>
+    <link rel="icon" href="data:," />
     <style>
       :root { color-scheme: light; font-family: system-ui, sans-serif; }
       body { margin: 0; display: grid; grid-template-rows: auto 1fr; height: 100vh; background: #fafbfc; }
       header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #e3e7ec; }
       header h1 { font-size: 18px; margin: 0; }
       header p { margin: 0; color: #5b6573; font-size: 14px; flex: 1; }
+      #step { color: #e8590c; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 6em; }
       #stage { overflow: auto; padding: 16px; }
       #stage svg { width: 100%; height: calc(100vh - 90px); }
     </style>
   </head>
   <body>
     <header>
-      <button id="prev" title="Previous view (←)">←</button>
+      <button id="prev" title="Previous step or view (←)">←</button>
       <select id="view" aria-label="View"></select>
-      <button id="next" title="Next view (→)">→</button>
+      <button id="next" title="Next step or view (→)">→</button>
+      <span id="step"></span>
       <h1 id="title"></h1>
       <p id="subtitle"></p>
     </header>

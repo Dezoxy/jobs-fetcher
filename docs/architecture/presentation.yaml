@@ -1,0 +1,11 @@
+# The story viewer/ tells with this workspace: view keys in presentation order.
+# The DSL says what the system is; this file only says the order to show it in.
+# A view left out here still appears, after these, in DSL order.
+story:
+  - SystemContext   # who uses it, and what it depends on
+  - Containers      # zoom in: what runs, and where it keeps its data
+  - RefreshRun      # one daily run, step by step
+  - Deployment      # where it runs, and what fails together
+  - Access          # who can reach the Worker
+  - Secrets         # where the credentials come from
+  - Delivery        # how a merged change reaches production

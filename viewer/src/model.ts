@@ -91,6 +91,8 @@ export interface SceneEdge {
   label: string;
   technology: string;
   style: RelationshipStyle;
+  /** The dynamic-view step this edge belongs to. */
+  step?: number;
 }
 
 export interface Scene {
@@ -101,6 +103,8 @@ export interface Scene {
   layout: Required<NonNullable<RawView['automaticLayout']>>;
   nodes: SceneNode[];
   edges: SceneEdge[];
+  /** A dynamic view's steps, ascending; empty for static views. */
+  steps: number[];
 }
 
 export const VIEW_KINDS = [
@@ -252,8 +256,10 @@ export function buildScene(ws: RawWorkspace, key: string): Scene {
       label: ref.order ? `${ref.order}. ${text}` : text,
       technology: rel.technology ?? '',
       style: relationshipStyle(sheet, splitTags(rel.tags)),
+      step: ref.order && Number.isFinite(Number(ref.order)) ? Number(ref.order) : undefined,
     });
   }
+  const steps = [...new Set(edges.flatMap((e) => (e.step === undefined ? [] : [e.step])))].sort((a, b) => a - b);
 
   const auto = view.automaticLayout ?? {};
   return {
@@ -269,5 +275,6 @@ export function buildScene(ws: RawWorkspace, key: string): Scene {
     },
     nodes: roots,
     edges,
+    steps,
   };
 }

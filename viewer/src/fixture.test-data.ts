@@ -53,6 +53,7 @@ export const fixture = (): RawWorkspace => ({
           { tag: 'Software System', background: '#0000ff' },
           { tag: 'External', background: '#999999', border: 'Dashed' },
           { tag: 'Database', shape: 'Cylinder' },
+          { tag: 'Person', shape: 'Person' },
         ],
         relationships: [
           { tag: 'Relationship', color: '#888888', dashed: false },

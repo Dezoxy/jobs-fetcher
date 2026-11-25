@@ -12,8 +12,11 @@
       header h1 { font-size: 18px; margin: 0; }
       header p { margin: 0; color: #5b6573; font-size: 14px; flex: 1; }
       #step { color: #e8590c; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 6em; }
-      #stage { overflow: auto; padding: 16px; }
-      #stage svg { width: 100%; height: calc(100vh - 90px); }
+      #stage { overflow: hidden; padding: 16px; min-height: 0; }
+      #stage svg, #stage canvas { display: block; width: 100%; height: calc(100vh - 90px); }
+      #modes { display: inline-flex; border: 1px solid #c9d2de; border-radius: 6px; overflow: hidden; }
+      #modes button { border: 0; background: #fff; padding: 4px 10px; cursor: pointer; }
+      #modes button[aria-pressed='true'] { background: #1f2937; color: #fff; }
     </style>
   </head>
   <body>
@@ -22,6 +25,9 @@
       <select id="view" aria-label="View"></select>
       <button id="next" title="Next step or view (→)">→</button>
       <span id="step"></span>
+      <span id="modes" role="group" aria-label="Mode (m)">
+        <button data-mode="2d">2D</button><button data-mode="2.5d">2.5D</button><button data-mode="3d">3D</button>
+      </span>
       <h1 id="title"></h1>
       <p id="subtitle"></p>
     </header>

@@ -16,6 +16,20 @@ npm run dev         # http://localhost:5173
 - **In a dynamic view**, → plays one step at a time. The current step is highlighted with a dot travelling along it, earlier steps stay drawn, and later ones are faint. After the last step, → moves to the next view.
 - With `prefers-reduced-motion`, views switch without animation.
 
+**Modes:** 2D / 2.5D / 3D in the header, or the `m` key. The choice is kept in the URL (`?mode=3d`).
+
+| Mode | Camera | Controls |
+|---|---|---|
+| 2D | SVG, the diagram as Structurizr draws it | browser zoom |
+| 2.5D | Three.js, orthographic, a fixed angle a little short of isometric | drag pans, scroll zooms |
+| 3D | Three.js, perspective | drag orbits, right-drag pans, scroll zooms |
+
+Both 3D modes use the same scene:
+- Boundaries become plates, and whatever is inside a boundary stands on its plate, so nesting reads as stacked tiers (Cloudflare › D1 › databases).
+- Labels always face the camera.
+- The camera flies with every view change, but keeps any angle you orbited to.
+- Three.js loads only when a 3D mode is first picked.
+
 **How it works:**
 
 | Step | File | Does |
@@ -26,6 +40,7 @@ npm run dev         # http://localhost:5173
 | Layout | `src/layout.ts` | Places the scene with ELK. The export has no coordinates for `autoLayout` views, so the viewer computes them, using each view's direction and spacing. |
 | Tween | `src/tween.ts` | The transition between two layouts, as a pure function of time. |
 | Render | `src/render.ts` | Draws a frame as SVG; text goes in through `textContent` only. |
+| 3D | `src/scene3d.ts`, `src/render3d.ts` | Lifts a frame into 3D specs (pure, tested), then draws and updates them with Three.js. |
 
 `public/workspace.json` and `public/presentation.yaml` are generated and
 git-ignored. `npm run workspace` regenerates them from `docs/architecture/`.

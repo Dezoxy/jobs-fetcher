@@ -240,9 +240,10 @@ describe("authorize", () => {
 // Capture console.log lines for the duration of fn.
 async function captureLogs(fn) {
   const lines = [];
-  const orig = console.log;
+  const orig = console.log, origError = console.error;
   console.log = (...a) => lines.push(a.join(" "));
-  try { return { result: await fn(), lines }; } finally { console.log = orig; }
+  console.error = (...a) => lines.push(a.join(" "));
+  try { return { result: await fn(), lines }; } finally { console.log = orig; console.error = origError; }
 }
 
 describe("checkAccess", () => {
@@ -650,6 +651,28 @@ describe("worker.fetch", () => {
   });
 });
 
+describe("readCapped drain", () => {
+  const chunked = (sizes) => {
+    let i = 0, pulls = 0, cancelled = false;
+    const stream = new ReadableStream({
+      pull(c) { pulls++; if (i < sizes.length) c.enqueue(new Uint8Array(sizes[i++]).fill(65)); else c.close(); },
+      cancel() { cancelled = true; },
+    });
+    return { stream, state: () => ({ pulls, cancelled, consumed: i === sizes.length }) };
+  };
+
+  test("default cancels past the cap; drain reads to the end and keeps only the cap", async () => {
+    const a = chunked([4, 4, 4, 4]);
+    const r1 = await readCapped(a.stream, 6);
+    assert.equal(r1.bytes.length, 6); assert.equal(r1.truncated, true);
+    assert.equal(a.state().cancelled, true); assert.equal(a.state().consumed, false);
+    const b = chunked([4, 4, 4, 4]);
+    const r2 = await readCapped(b.stream, 6, { drain: true });
+    assert.equal(r2.bytes.length, 6); assert.equal(r2.truncated, true); assert.equal(r2.text, "AAAAAA");
+    assert.equal(b.state().cancelled, false); assert.equal(b.state().consumed, true);
+  });
+});
+
 describe("worker.email", () => {
   const CF_OK = "mx.cloudflare.net; dkim=pass header.d=linkedin.com header.s=s1; dmarc=pass header.from=linkedin.com; spf=pass";
   const message = ({ from = "LinkedIn <jobalerts-noreply@linkedin.com>", auth = CF_OK, body = "" } = {}) => {
@@ -785,6 +808,36 @@ describe("worker.email", () => {
     assert.deepEqual(broken.forwarded, [FORWARD_TO]);
     const failed = lines.map(l => JSON.parse(l)).find(l => l.event === "email_ingest_failed");
     assert.equal(failed.error, "stream reset by <address>");
+  });
+
+  test("mail-loss events are logged at error level (what Workers Issues alerts on)", async () => {
+    const errors = [], orig = console.error, origLog = console.log;
+    console.error = (...a) => errors.push(JSON.parse(a.join(" ")).event);
+    console.log = () => {};
+    try {
+      const m = message({ body: "x" });
+      m.forward = async () => { throw new Error("boom"); };
+      await worker.email(m, { JOBS_DB: fakeD1(), FORWARD_TO: "owner@inbox.example" });
+      await worker.email(message({ body: "https://www.linkedin.com/jobs/view/4012345678" }), { JOBS_DB: fakeD1({ fail: true }) });
+      const ok = message({ body: "https://www.linkedin.com/jobs/view/4012345678" });
+      await worker.email(ok, { JOBS_DB: fakeD1(), FORWARD_TO: "owner@inbox.example" });
+    } finally { console.error = orig; console.log = origLog; }
+    assert.deepEqual(errors, ["email_forward_failed", "email_store_failed"]);
+  });
+
+  test("an oversized mail is drained to the end before it is forwarded", async () => {
+    let consumedBeforeForward = null, cancelled = false, sent = 0;
+    const total = 600 * 1024, chunk = 64 * 1024;
+    const m = message({});
+    m.raw = new ReadableStream({
+      pull(c) { if (sent >= total) return c.close(); c.enqueue(new TextEncoder().encode("x".repeat(chunk))); sent += chunk; },
+      cancel() { cancelled = true; },
+    });
+    m.forward = async (to) => { consumedBeforeForward = sent >= total; m.forwarded.push(to); };
+    const { lines } = await captureLogs(() => worker.email(m, { JOBS_DB: fakeD1(), FORWARD_TO: "owner@inbox.example" }));
+    assert.equal(consumedBeforeForward, true); assert.equal(cancelled, false);
+    const noIds = lines.map(l => JSON.parse(l)).find(l => l.event === "email_no_ids");
+    assert.equal(noIds.truncated, true);
   });
 
   test("a forward failure is logged without addresses and never thrown; unforwardable mail is skipped", async () => {

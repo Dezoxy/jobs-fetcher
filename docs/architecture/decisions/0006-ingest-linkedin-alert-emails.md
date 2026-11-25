@@ -61,6 +61,12 @@ handler:
    that fails step 2 is never forwarded: linkedin.com enforces DMARC, so it is
    almost certainly a spoof, and relaying it would deliver phishing to the
    owner. A forward failure is logged with addresses redacted and never thrown.
+   Every event that can lose a message (`email_forward_failed`,
+   `email_forward_skipped`, `email_ingest_failed`, `email_store_failed`) is
+   logged at error level; Workers Issues groups it and a Cloudflare
+   notification policy e-mails the owner. The raw message is drained, not
+   cancelled, past the 512 KB read cap, so `forward()` always follows a fully
+   read stream, the state verified in production on 2026-11-25.
 
 The runner fetches each new id's guest detail page and treats it like any other
 candidate. An id is consumed once decided, or after 7 days.

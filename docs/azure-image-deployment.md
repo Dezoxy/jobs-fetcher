@@ -91,7 +91,7 @@ at a time; operator Terraform applies must not overlap this workflow.
 The repository's `azure-production` environment permits only `main`, and the
 `main` ruleset accepts changes only through pull requests.
 Azure trusts the exact subject
-`repo:Dezoxy@176568786/jobs-fetcher@JOBS_FETCHER_REPO_ID:environment:azure-production`, issued by
+`repo:Dezoxy@176568786/jobs-fetcher@1471545526:environment:azure-production`, issued by
 `https://token.actions.githubusercontent.com` for `api://AzureADTokenExchange`.
 The subject prefix is read from GitHub’s OIDC customization API; this repository
 uses immutable owner/repository IDs. PRs and other branches cannot use the production environment. The workflow

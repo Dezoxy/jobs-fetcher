@@ -3,7 +3,6 @@ backup_storage_account_name = "REPLACE_BACKUP_NAME"
 key_vault_name = "REPLACE_VAULT_NAME"
 backend_resource_group_name = "jobs-dashboard-terraform-westeurope"
 alert_email = "REPLACE_OWNER_EMAIL"
-ghcr_username = "Dezoxy"
 budget_start_date = "2026-10-01T00:00:00Z"
 monthly_budget = 5
 jobs_enabled = false
@@ -20,7 +19,6 @@ image = ""
 # JOBS_REFRESH_FALLBACK_MODELS = "claude-opus-5-5,claude-sonnet-5-5"
 # Names only. Values are copied separately into the dedicated vault.
 secret_names = {
-  GHCR_PULL_TOKEN = "jobs-ghcr-pull-token"
   CLAUDE_CODE_OAUTH_TOKEN = "jobs-claude-oauth-token"
   EMPLOYEE_CV_SSH_KEY = "jobs-employee-cv-deploy-key"
   JOBS_TRACKER_CLIENT_ID = "jobs-tracker-client-id"

@@ -204,7 +204,7 @@ existing deployment.
 Copy [backend.hcl.example](../infra/azure/backend.hcl.example) and
 [production.auto.tfvars.example](../infra/azure/production.auto.tfvars.example)
 to their ignored private counterparts. Fill in subscription, unique names,
-recipient, billing-month start and registry username. Keep `jobs_enabled`,
+recipient and billing-month start. Keep `jobs_enabled`,
 `schedules_enabled`, `migration_release_verified` and
 `vm_publisher_paused` false. No secret values belong in either file.
 
@@ -240,8 +240,8 @@ python3 scripts/migrate-azure-secrets.py --subscription SUBSCRIPTION_ID --target
 
 Import the two existing private SSH keys through protected local files using
 `az keyvault secret set --file PRIVATE_FILE --output none`, preserving the
-`folder=jobs-refresh` and appropriate `envvar` tags on each version. Provision
-a read:packages registry credential as `jobs-ghcr-pull-token`. Verify all
+`folder=jobs-refresh` and appropriate `envvar` tags on each version. The image is
+public and needs no registry credential (ADR 9). Verify all
 referenced secrets before enabling jobs; Manual jobs can resolve secrets during creation.
 Never print key/token values or put them in Terraform arguments.
 

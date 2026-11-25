@@ -11,7 +11,7 @@ UUID_RE = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
 FIELDS = {
     "resource_group_name", "location",
     "backup_resource_group_name", "backup_storage_account_name", "key_vault_name",
-    "backend_resource_group_name", "alert_email", "ghcr_username", "budget_start_date",
+    "backend_resource_group_name", "alert_email", "budget_start_date",
     "monthly_budget", "jobs_enabled", "schedules_enabled",
     "secret_names", "app_env", "subscription_id",
 }

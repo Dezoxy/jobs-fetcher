@@ -36,7 +36,7 @@ variable "image" {
   type        = string
   default     = ""
   validation {
-    condition     = var.image == "" ? !var.jobs_enabled : can(regex("^ghcr\\.io/dezoxy/jobs-(fetcher|dashboard)@sha256:[0-9a-f]{64}$", var.image))
+    condition     = var.image == "" ? !var.jobs_enabled : can(regex("^ghcr\\.io/dezoxy/jobs-fetcher@sha256:[0-9a-f]{64}$", var.image))
     error_message = "Jobs require the verified immutable release digest; an empty image is allowed only for the foundation."
   }
 }
@@ -67,11 +67,6 @@ variable "schedules_enabled" {
   }
 }
 
-variable "ghcr_username" {
-  description = "GitHub username matching the read:packages PAT; no token values here."
-  type        = string
-}
-
 variable "key_vault_name" {
   description = "Globally unique name of the dedicated jobs vault created by this stack."
   type        = string
@@ -82,7 +77,7 @@ variable "key_vault_name" {
 }
 
 variable "secret_names" {
-  description = "Runtime environment name -> secret name in the dedicated jobs vault. GHCR_PULL_TOKEN is registry-only. Secret values are copied separately and never managed by Terraform."
+  description = "Runtime environment name -> secret name in the dedicated jobs vault. Secret values are copied separately and never managed by Terraform."
   type        = map(string)
   validation {
     condition = alltrue([
@@ -93,9 +88,9 @@ variable "secret_names" {
   }
   validation {
     condition = alltrue([
-      for name in ["GHCR_PULL_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "EMPLOYEE_CV_SSH_KEY", "JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] : contains(keys(var.secret_names), name)
+      for name in ["CLAUDE_CODE_OAUTH_TOKEN", "EMPLOYEE_CV_SSH_KEY", "JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] : contains(keys(var.secret_names), name)
     ])
-    error_message = "Registry, subscription OAuth, the employee-cv deploy key, tracker and Telegram secret references are required."
+    error_message = "Subscription OAuth, the employee-cv deploy key, tracker and Telegram secret references are required."
   }
   validation {
     condition     = length(setintersection(toset(keys(var.secret_names)), toset(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_IDENTITY_TOKEN"]))) == 0

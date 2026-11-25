@@ -13,7 +13,7 @@ locals {
   }
   # Secrets the backup job may read. CLOUDFLARE_API_TOKEN (when mapped) lets the
   # backup export both D1 databases.
-  backup_secret_names = [for name in ["GHCR_PULL_TOKEN", "JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET", "CLOUDFLARE_API_TOKEN"] : name if contains(keys(var.secret_names), name)]
+  backup_secret_names = [for name in ["JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET", "CLOUDFLARE_API_TOKEN"] : name if contains(keys(var.secret_names), name)]
   backup_env = {
     JOBS_CLOUD_BACKUP_ACCOUNT_URL = azurerm_storage_account.backup.primary_blob_endpoint
     JOBS_CLOUD_BACKUP_CONTAINER   = azurerm_storage_container.backup.name
@@ -119,11 +119,6 @@ resource "azurerm_container_app_job" "jobs" {
       key_vault_secret_id = secret.value.url
     }
   }
-  registry {
-    server               = "ghcr.io"
-    username             = var.ghcr_username
-    password_secret_name = local.secrets["GHCR_PULL_TOKEN"].name
-  }
   template {
     container {
       name    = "jobs"
@@ -140,7 +135,7 @@ resource "azurerm_container_app_job" "jobs" {
         }
       }
       dynamic "env" {
-        for_each = { for name, secret in local.secrets : name => secret if name != "GHCR_PULL_TOKEN" && (each.key != "backup" || contains(local.backup_secret_names, name)) }
+        for_each = { for name, secret in local.secrets : name => secret if each.key != "backup" || contains(local.backup_secret_names, name) }
         content {
           name        = env.key
           secret_name = env.value.name

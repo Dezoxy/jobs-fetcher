@@ -9,10 +9,8 @@ variables {
   backup_storage_account_name = "jobsbackuptest"
   key_vault_name              = "jobs-vault-test"
   alert_email                 = "test@example.com"
-  ghcr_username               = "test"
   budget_start_date           = "2026-10-01T00:00:00Z"
   secret_names = {
-    GHCR_PULL_TOKEN            = "registry"
     CLAUDE_CODE_OAUTH_TOKEN    = "oauth"
     EMPLOYEE_CV_SSH_KEY        = "cv-read"
     JOBS_TRACKER_CLIENT_ID     = "tracker-id"
@@ -52,7 +50,6 @@ run "backup_gets_cloudflare_token_only_when_mapped" {
     jobs_enabled = true
     image        = "ghcr.io/dezoxy/jobs-fetcher@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     secret_names = {
-      GHCR_PULL_TOKEN            = "registry"
       CLAUDE_CODE_OAUTH_TOKEN    = "oauth"
       EMPLOYEE_CV_SSH_KEY        = "cv-read"
       JOBS_TRACKER_CLIENT_ID     = "tracker-id"
@@ -71,7 +68,7 @@ run "backup_gets_cloudflare_token_only_when_mapped" {
     error_message = "The v2 refresh needs the Cloudflare token."
   }
   assert {
-    condition     = toset(keys(azurerm_role_assignment.backup_secrets)) == toset(["GHCR_PULL_TOKEN", "JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET", "CLOUDFLARE_API_TOKEN"])
+    condition     = toset(keys(azurerm_role_assignment.backup_secrets)) == toset(["JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET", "CLOUDFLARE_API_TOKEN"])
     error_message = "Backup identity gets per-secret access to exactly its secrets."
   }
 }
@@ -83,7 +80,7 @@ run "backup_without_cloudflare_mapping_is_unchanged" {
     image        = "ghcr.io/dezoxy/jobs-fetcher@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   }
   assert {
-    condition     = toset(keys(azurerm_role_assignment.backup_secrets)) == toset(["GHCR_PULL_TOKEN", "JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET"])
+    condition     = toset(keys(azurerm_role_assignment.backup_secrets)) == toset(["JOBS_TRACKER_CLIENT_ID", "JOBS_TRACKER_CLIENT_SECRET"])
     error_message = "Without a Cloudflare mapping the backup secrets stay as before."
   }
 }
@@ -121,7 +118,6 @@ run "static_claude_fallback_credentials_are_rejected" {
   command = plan
   variables {
     secret_names = {
-      GHCR_PULL_TOKEN            = "registry"
       CLAUDE_CODE_OAUTH_TOKEN    = "oauth"
       EMPLOYEE_CV_SSH_KEY        = "cv-read"
       JOBS_TRACKER_CLIENT_ID     = "tracker-id"

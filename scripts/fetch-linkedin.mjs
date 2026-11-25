@@ -118,8 +118,23 @@ const LOCATION = "Budapest, Hungary";
 // a cap exits non-zero while preserving collected rows.
 const PAGE_SIZE = 10;
 const MAX_START = 90;
-const DELAY_MS = 1200;
-const MAX_RETRIES = 3;
+// Pacing and 429 handling. On 2026-11-25 three of six queries still failed with
+// HTTP 429 after 4.8 s and 9.6 s waits from Azure's egress, so pages are spaced
+// further apart, a page retries with exponential backoff (or the server's
+// Retry-After), and a query that still fails is resumed once, from the page it
+// stopped at, after a cooldown. Worst case adds about ten minutes to a run.
+const DELAY_MS = 2500;          // between pages, plus jitter
+const QUERY_DELAY_MS = 5000;    // between queries
+const MAX_RETRIES = 4;          // attempts per page
+const BACKOFF_MS = 5000;        // 5, 10, 20 s (+ jitter) unless Retry-After says otherwise
+const MAX_BACKOFF_MS = 60_000;
+const COOLDOWN_MS = 90_000;     // before the one resume pass over failed queries
+// Hard ceiling for the whole collection. The Container Apps job has a 50-minute
+// replica timeout shared with the Claude judge (10-minute batches), and every
+// query failing every retry would otherwise spend about 30 minutes waiting.
+// A page in flight when the budget runs out still finishes its retries (at most
+// about 3 minutes), so the step ends within roughly 15 minutes.
+const BUDGET_MS = 12 * 60_000;
 
 import fs from "node:fs";
 import path from "node:path";
@@ -150,23 +165,43 @@ export function parseCards(html) {
   })).filter((r) => r.jobId && r.title);
 }
 
+const jitter = (ms, random = Math.random) => ms + Math.floor(random() * 1000);
+
+/** Wait before retry `attempt` (1-based): Retry-After seconds if given, else exponential. */
+export function backoffMs(attempt, retryAfter, random = Math.random) {
+  const seconds = Number(retryAfter);
+  if (retryAfter != null && retryAfter !== "" && Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, MAX_BACKOFF_MS);
+  }
+  return jitter(Math.min(BACKOFF_MS * 2 ** (attempt - 1), MAX_BACKOFF_MS), random);
+}
+
+/**
+ * GET with retries for the failures a pause can fix: 429, 5xx and network
+ * errors. Any other status fails at once. Returns the body of a 200.
+ */
+export async function fetchWithRetry(url, { fetchImpl = fetch, pause = sleep, random = Math.random,
+  onRetry = (why, ms) => console.error(`  .. ${why}, retrying in ${Math.round(ms / 1000)} s`) } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    let res = null, error = null;
+    try {
+      res = await fetchImpl(url, { signal: AbortSignal.timeout(30_000) });
+      if (res.status === 200) return await res.text();
+    } catch (e) {
+      error = e;
+    }
+    const retryable = !res || res.status === 429 || res.status >= 500;
+    if (!retryable || attempt === MAX_RETRIES) throw error ?? new Error(`HTTP ${res.status}`);
+    const ms = backoffMs(attempt, res?.headers?.get("retry-after"), random);
+    onRetry(res ? `HTTP ${res.status}` : error.message, ms);
+    await pause(ms);
+  }
+}
+
 async function getPage(keywords, window, start) {
   const url = `${BASE}?keywords=${encodeURIComponent(keywords)}` +
     `&location=${encodeURIComponent(LOCATION)}&f_TPR=${window}&start=${start}`;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-      if (res.status === 200) return parseCards(await res.text());
-      // 429 is the one we expect to meet eventually; back off rather than
-      // hammering, and let the caller decide whether the run still stands.
-      if (attempt === MAX_RETRIES) throw new Error(`HTTP ${res.status}`);
-      await sleep(DELAY_MS * 4 * attempt);
-    } catch (e) {
-      if (attempt === MAX_RETRIES) throw e;
-      await sleep(DELAY_MS * 4 * attempt);
-    }
-  }
-  return [];
+  return parseCards(await fetchWithRetry(url));
 }
 
 export async function collectLinkedIn({ queries = LINKEDIN_QUERIES, fetchPage = getPage,
@@ -178,67 +213,97 @@ export async function collectLinkedIn({ queries = LINKEDIN_QUERIES, fetchPage = 
   // pass as "covered everything" — it is reported per query and in the file.
   const truncated = [];
 
+  // One entry per query and window. `next` is the first page not yet fetched,
+  // so the resume pass continues where a failure stopped the query.
+  // `ids` holds the distinct ids THIS query returned. `fresh` cannot stand in for
+  // it: it also excludes ids an earlier query already collected, so a query
+  // overlapping a previous one looks like page 1 repeating when it is not. On
+  // 2026-09-11 "system architect" and "technical architect" each paged through
+  // 100 distinct ids, showed fresh=5 and fresh=3, and were reported PAGING BROKEN.
+  const entries = [];
+  const startedAt = now().getTime();
+  const overBudget = () => now().getTime() - startedAt > BUDGET_MS;
+  const runQuery = async (entry) => {
+    try {
+      for (let start = entry.next; start <= MAX_START; start += PAGE_SIZE) {
+        if (overBudget()) throw new Error(`time budget of ${BUDGET_MS / 60_000} min exhausted`);
+        const cards = await fetchPage(entry.q, entry.window, start);
+        entry.next = start + PAGE_SIZE;
+        if (cards.length === 0) return;            // exhausted this query
+        entry.got += cards.length;
+        if (start === MAX_START && cards.length === PAGE_SIZE) entry.hitCeiling = true;
+        for (const c of cards) {
+          entry.ids.add(c.jobId);
+          if (rows.has(c.jobId)) continue;
+          entry.fresh++;
+          rows.set(c.jobId, {
+            id: `li-${c.jobId}`,
+            url: `https://www.linkedin.com/jobs/view/${c.jobId}/`,
+            // The role line ONLY — no company, no location, no "Promoted".
+            // docs/refresh-task.md's Output block requires exactly this, and
+            // vetoes.mjs is calibrated on 764 hand-judged titles.
+            title: c.title,
+            text: [c.title, c.company, c.location, c.posted].filter(Boolean).join(" · "),
+            company: c.company || null,
+            location: c.location || null,
+            postedAt: c.posted || null,
+          });
+        }
+        if (cards.length < PAGE_SIZE) return;      // last page
+        await pause(jitter(DELAY_MS));
+      }
+    } catch (e) {
+      entry.error = e.message;
+    }
+  };
+
   for (const q of queries) {
     for (const window of TIME_WINDOWS) {
-      let got = 0, fresh = 0, hitCeiling = false;
-      // Distinct ids THIS query returned. `fresh` cannot stand in for it: it also
-      // excludes ids an earlier query already collected, so a query overlapping a
-      // previous one looks like page 1 repeating when it is not. On 2026-09-11
-      // "system architect" and "technical architect" each paged through 100
-      // distinct ids, showed fresh=5 and fresh=3, and were reported PAGING BROKEN.
-      const queryIds = new Set();
-      try {
-        for (let start = 0; start <= MAX_START; start += PAGE_SIZE) {
-          const cards = await fetchPage(q, window, start);
-          if (cards.length === 0) break;            // exhausted this query
-          got += cards.length;
-          if (start === MAX_START && cards.length === PAGE_SIZE) hitCeiling = true;
-          for (const c of cards) {
-            queryIds.add(c.jobId);
-            if (rows.has(c.jobId)) continue;
-            fresh++;
-            rows.set(c.jobId, {
-              id: `li-${c.jobId}`,
-              url: `https://www.linkedin.com/jobs/view/${c.jobId}/`,
-              // The role line ONLY — no company, no location, no "Promoted".
-              // docs/refresh-task.md's Output block requires exactly this, and
-              // vetoes.mjs is calibrated on 764 hand-judged titles.
-              title: c.title,
-              text: [c.title, c.company, c.location, c.posted].filter(Boolean).join(" · "),
-              company: c.company || null,
-              location: c.location || null,
-              postedAt: c.posted || null,
-            });
-          }
-          if (cards.length < PAGE_SIZE) break;      // last page
-          await pause(DELAY_MS);
-        }
-      } catch (e) {
-        failures.push(`${q} [${window}]: ${e.message}`);
-      }
-      // Every cap is severe now. When there were two windows this had a tolerable
-      // case — a 7-day pass that capped only cost some row a lastSeen bump. That
-      // pass is gone (and the "tolerable" reading of it turned out to be wrong
-      // anyway: it cost 13 live ads their refresh). What is left is the discovery
-      // pass, and a cap there means an ad published inside the window was
-      // dropped and nothing downstream will ever see it.
-      // A ceiling hit has two very different causes and they need different
-      // fixes, so name which one this is instead of making a human diff the log.
-      //
-      // If `start=` were ever ignored, every page would return page 1 again: the
-      // loop never sees a short page, runs to MAX_START, and reports got=100 with
-      // at most 10 distinct ids (queryIds, not fresh; see above). A genuine cap
-      // looks nothing like that: it accumulates distinct ids the whole way down.
-      // This is the check the retired browse step needed a
-      // row-count threshold to approximate, and it is exact rather than
-      // statistical, which is why refresh-run.sh's JOBS_REFRESH_BROWSE_MIN_ROWS
-      // no longer has to carry it (see the note there).
-      if (hitCeiling) {
-        truncated.push({ q, window, paging: queryIds.size <= PAGE_SIZE && got >= MAX_START + PAGE_SIZE });
-      }
-      perQuery.push({ q, window, got, fresh, hitCeiling });
-      await pause(DELAY_MS);
+      const entry = { q, window, next: 0, got: 0, fresh: 0, hitCeiling: false, ids: new Set(), error: null };
+      entries.push(entry);
+      await runQuery(entry);
+      await pause(jitter(QUERY_DELAY_MS));
     }
+  }
+
+  // A rate limit that outlasted the per-page backoff usually clears within a
+  // minute or two: resume each failed query once, from the page it stopped at.
+  const failedFirstPass = entries.filter((e) => e.error);
+  if (failedFirstPass.length && !overBudget()) {
+    console.error(`  .. ${failedFirstPass.length} quer${failedFirstPass.length === 1 ? "y" : "ies"} failed; ` +
+      `resuming after ${COOLDOWN_MS / 1000} s`);
+    await pause(COOLDOWN_MS);
+    for (const entry of failedFirstPass) {
+      entry.error = null;
+      entry.resumed = true;
+      await runQuery(entry);
+      await pause(jitter(QUERY_DELAY_MS));
+    }
+  }
+
+  for (const { q, window, got, fresh, hitCeiling, ids, error, resumed } of entries) {
+    if (error) failures.push(`${q} [${window}]: ${error}`);
+    // Every cap is severe now. When there were two windows this had a tolerable
+    // case — a 7-day pass that capped only cost some row a lastSeen bump. That
+    // pass is gone (and the "tolerable" reading of it turned out to be wrong
+    // anyway: it cost 13 live ads their refresh). What is left is the discovery
+    // pass, and a cap there means an ad published inside the window was
+    // dropped and nothing downstream will ever see it.
+    // A ceiling hit has two very different causes and they need different
+    // fixes, so name which one this is instead of making a human diff the log.
+    //
+    // If `start=` were ever ignored, every page would return page 1 again: the
+    // loop never sees a short page, runs to MAX_START, and reports got=100 with
+    // at most 10 distinct ids (`ids`, not fresh; see above). A genuine cap
+    // looks nothing like that: it accumulates distinct ids the whole way down.
+    // This is the check the retired browse step needed a
+    // row-count threshold to approximate, and it is exact rather than
+    // statistical, which is why refresh-run.sh's JOBS_REFRESH_BROWSE_MIN_ROWS
+    // no longer has to carry it (see the note there).
+    if (hitCeiling) {
+      truncated.push({ q, window, paging: ids.size <= PAGE_SIZE && got >= MAX_START + PAGE_SIZE });
+    }
+    perQuery.push({ q, window, got, fresh, hitCeiling, ...(resumed ? { resumed: true } : {}) });
   }
 
   const allFailed = failures.length === queries.length * TIME_WINDOWS.length;

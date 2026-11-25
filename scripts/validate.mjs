@@ -89,6 +89,10 @@ if (fs.existsSync(R)) {
         (!Array.isArray(run.cleanedDeadIds) ||
          run.cleanedDeadIds.some((id) => typeof id !== "string" || !id.trim())))
       fail(`${R}: "cleanedDeadIds" must be an array of non-empty id strings`);
+    // Shown in the site footer and linked to its GitHub release.
+    if (run.engineVersion !== undefined &&
+        !(typeof run.engineVersion === "string" && /^(?:\d{4}\.\d{1,2}\.\d{1,4}|dev)$/.test(run.engineVersion)))
+      fail(`${R}: "engineVersion" must be a YYYY.M.N release or "dev"`);
     if (/<[a-z/]/i.test(run.summary))
       fail(`${R}: "summary" must be plain text — the notifier escapes HTML, tags will show literally`);
   }

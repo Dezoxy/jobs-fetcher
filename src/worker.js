@@ -2,6 +2,7 @@
 //
 // Routes that reach this script (wrangler.jsonc run_worker_first):
 //   GET  /data/jobs.json, /data/last-run.json  SNAPSHOT KV (written by each v2 run)
+//   GET  /data/version.json                     this Worker's deployed version (footer)
 //   GET  /api/tracker                           TRACKER_DB → { [id]: { st, at } }
 //   PUT  /api/tracker                           replace the whole map (owner only)
 //   email()                                     LinkedIn alert → JOBS_DB.email_candidates
@@ -46,8 +47,20 @@ function getKeyFor(team) {
   return keyStore;
 }
 
+// The version_metadata binding: the tag is the short commit when deployed by
+// scripts/cf-deploy.sh; any other tag is dropped. Null fields when unbound
+// (wrangler dev, tests) or deployed without a tag.
+const COMMIT = /^[0-9a-f]{7,40}$/;
+export function webVersion(meta) {
+  return {
+    commit: COMMIT.test(meta?.tag ?? "") ? meta.tag : null,
+    deployedAt: typeof meta?.timestamp === "string" && meta.timestamp ? meta.timestamp : null,
+  };
+}
+
 async function serveData(request, env, pathname) {
   if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, 405);
+  if (pathname === "/data/version.json") return json({ web: webVersion(env.CF_VERSION_METADATA) });
   const key = SNAPSHOT_KEYS.get(pathname);
   if (!key) return json({ error: "not found" }, 404);
   // Streamed straight through: the 1.5 MB list is never parsed here

@@ -535,12 +535,45 @@ function renderSalaryDist() {
 async function loadRunNote() {
   try {
     const r = await fetch("/data/last-run.json", { cache: "no-cache" });
-    if (!r.ok) return; // includes 404 — absent file is a silent no-op
+    if (!r.ok) return null; // includes 404 — absent file is a silent no-op
     const data = await r.json();
     renderRunNote(data);
+    return data;
   } catch (e) {
-    // silent: banner is optional
+    return null; // silent: banner is optional
   }
+}
+
+// --- footer: website (Worker) and engine (image that made the list) versions ---
+const REPO = "https://github.com/Dezoxy/jobs-fetcher";
+async function loadWebVersion() {
+  try {
+    const r = await fetch("/data/version.json", { cache: "no-store" });
+    return r.ok ? (await r.json()).web : null;
+  } catch (e) {
+    return null;
+  }
+}
+function renderVersions(web, runNote) {
+  const parts = [];
+  const commit = web && /^[0-9a-f]{7,40}$/.test(web.commit || "") ? web.commit : null;
+  const deployed = web && web.deployedAt ? new Date(web.deployedAt) : null;
+  const when = deployed && !isNaN(deployed) ? deployed.toLocaleString("hu-HU") : "";
+  if (commit) {
+    parts.push(`Weboldal: <a href="${REPO}/commit/${commit}" target="_blank" rel="noopener">${esc(commit.slice(0, 7))}</a>` +
+      (when ? ` (${esc(when)})` : ""));
+  } else if (when) {
+    parts.push(`Weboldal: ${esc(when)}`);
+  }
+  const engine = runNote && typeof runNote.engineVersion === "string" ? runNote.engineVersion : "";
+  if (/^\d{4}\.\d{1,2}\.\d{1,4}$/.test(engine)) {
+    parts.push(`Motor: <a href="${REPO}/releases/tag/v${engine}" target="_blank" rel="noopener">v${esc(engine)}</a>`);
+  } else if (engine === "dev") {
+    parts.push("Motor: dev");
+  }
+  if (!parts.length) return;
+  el("versions").innerHTML = parts.join(" · ");
+  el("versions").hidden = false;
 }
 function renderRunNote(data) {
   const ranAt = data && data.ranAt ? new Date(data.ranAt) : null;
@@ -880,7 +913,8 @@ async function boot() {
     console.error(err);
   }
 
-  loadRunNote(); // independent of jobs.json; absent file / errors are silent
+  // Independent of jobs.json; absent files / errors are silent.
+  Promise.all([loadWebVersion(), loadRunNote()]).then(([web, note]) => renderVersions(web, note));
 }
 
 boot();

@@ -71,6 +71,11 @@
   // 2026-11-24 they served jobs.json and the tracker to anyone.
   "workers_dev": false,
   "preview_urls": false,
+  // id, tag and timestamp of the deployed version, for /data/version.json and
+  // the site footer. The tag is the short commit (scripts/cf-deploy.sh).
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
   "observability": {
     "enabled": true,
     // Issues groups error-level logs; a Cloudflare notification policy

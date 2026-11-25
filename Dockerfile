@@ -33,6 +33,11 @@ COPY docs/judge-prompt.md ./docs/judge-prompt.md
 COPY runtime/ ./runtime/
 RUN mkdir -p /data/employee-cv && chown -R node:node /data
 ENV HOME=/home/node DISABLE_AUTOUPDATER=1 CLAUDE_CONFIG_DIR=/tmp/claude
+# The release this image was built as (YYYY.M.N, from release.yml). Each run
+# records it in last-run.json as engineVersion; the site footer shows it. Last,
+# so a new version never invalidates the layers above. "dev" for CI builds.
+ARG ENGINE_VERSION=dev
+ENV ENGINE_VERSION=${ENGINE_VERSION}
 USER node
 ENTRYPOINT ["node", "/app/scripts/cloud-run.mjs"]
 CMD ["refresh"]

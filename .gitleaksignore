@@ -1,0 +1,3 @@
+# Cloudflare Access application audience tag: a public identifier the Worker
+# checks JWTs against (ADR 5), not a credential.
+wrangler.jsonc:generic-api-key:33

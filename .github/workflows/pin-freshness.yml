@@ -1,0 +1,37 @@
+name: Image pin freshness
+
+# auto-release stops at the GHCR image; Renovate's automerged pin PR deploys it.
+# If that chain stalls (Renovate cannot read GHCR, its regex stopped matching,
+# or the pin PR's checks are red), nothing else fails. This does: when the
+# newest release tag is not the pinned image_version six hours after its commit,
+# the run fails and GitHub e-mails the owner.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Newest release is pinned, or younger than six hours
+        run: |
+          git fetch --force --tags --quiet
+          latest=$(git tag --list 'v*' | python3 .github/scripts/next_release_version.py --existing)
+          pinned="v$(python3 -c 'import json; print(json.load(open("infra/azure/image.auto.tfvars.json"))["image_version"])')"
+          if [ "$latest" = "$pinned" ]; then
+            echo "The pin is the newest release, $pinned."
+            exit 0
+          fi
+          age=$(( $(date +%s) - $(git log -1 --format=%ct "$latest^{commit}") ))
+          if [ "$age" -gt 21600 ]; then
+            echo "::error::Release $latest is $((age / 3600))h old but the pin is still $pinned. Check the Renovate Dependency Dashboard and the pin PR."
+            exit 1
+          fi
+          echo "Release $latest is $((age / 60)) min old; waiting for Renovate's pin PR (pin is $pinned)."

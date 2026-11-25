@@ -1,0 +1,73 @@
+name: Automatic refresh release
+
+# Every merge to main that changes what the image ships is released as the next
+# CalVer version (vYYYY.M.N) and pushed to GHCR as :YYYY.M.N. Deployment is NOT
+# part of this workflow: Renovate notices the new tag, opens a PR bumping
+# infra/azure/image.auto.tfvars.json (image_version + digest), automerges it once
+# CI is green, and that push to main runs azure-deploy.yml, whose guard accepts
+# only an image-only plan and waits for idle jobs. The pin file is outside the
+# path filter below, so a pin bump never cuts a release.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'scripts/**'
+      - 'runtime/**'
+      - 'docs/judge-prompt.md'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jobs-dashboard-auto-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/azure-application.yml
+
+  tag:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Create or reuse this commit's CalVer release (vYYYY.M.N)
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin --tags
+          # Reuse the tag on a retry, including a previously failed image build.
+          tag=$(git tag --points-at "$GITHUB_SHA" | python3 .github/scripts/next_release_version.py --existing)
+          if [ -z "$tag" ]; then
+            tag=$(git tag --list 'v*' | python3 .github/scripts/next_release_version.py)
+          fi
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes
+          fi
+          git fetch origin tag "$tag"
+          test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: tag
+    permissions:
+      contents: read
+      packages: write
+    # A GITHUB_TOKEN-created tag does not trigger release.yml's push event.
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

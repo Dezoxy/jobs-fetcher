@@ -1,0 +1,133 @@
+name: Azure image deployment
+
+on:
+  # A merged image-pin bump (Renovate, or a revert) deploys. The guard refuses
+  # anything but an image-only change of both jobs and waits for idle jobs.
+  push:
+    branches: [main]
+    paths: ['infra/azure/image.auto.tfvars.json']
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        description: Inspect the current plan, or deploy the committed image digest
+        options: [plan, deploy]
+        default: plan
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jobs-dashboard-azure
+  cancel-in-progress: false
+
+jobs:
+  image:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Azure federation and the environment branch policy both restrict this to main.
+    environment: azure-production
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    # Environment secrets, not variables: this repo's logs are public and GitHub
+    # prints variable values in each step's env header. Secrets are masked.
+    env:
+      ARM_USE_OIDC: 'true'
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_IN_AUTOMATION: 'true'
+      TFVARS_JSON: ${{ secrets.AZURE_TERRAFORM_VARS_JSON }}
+      BACKEND_JSON: ${{ secrets.AZURE_TERRAFORM_BACKEND_JSON }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Refuse a superseded image pin
+        run: |
+          git fetch --quiet origin main
+          if ! git diff --quiet HEAD origin/main -- infra/azure/image.auto.tfvars.json; then
+            echo '::error::A newer image pin is on main; its own deployment run applies it.'
+            exit 1
+          fi
+      - name: Read Terraform pin
+        id: versions
+        run: |
+          source runtime/versions.env
+          echo "terraform=$TERRAFORM_VERSION" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+      - name: Validate backend and nonsecret configuration
+        run: python3 .github/scripts/azure_deploy_config.py
+      - name: Connect to Azure using OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - run: terraform -chdir=infra/azure init -input=false -lockfile=readonly -backend-config=backend.hcl
+      - name: Create saved plan
+        # Saved plans and JSON contain state/configuration. Keep them on this
+        # ephemeral runner, with no artifact upload or full plan in the log.
+        run: |
+          if ! terraform -chdir=infra/azure plan -input=false -no-color -out=deployment.tfplan > "$RUNNER_TEMP/terraform-plan.log" 2>&1; then
+            echo '::error::Terraform plan failed; inspect Azure permissions and configuration or reproduce with operator login.'
+            exit 1
+          fi
+          terraform -chdir=infra/azure show -json deployment.tfplan > "$RUNNER_TEMP/plan.json"
+      - name: Accept only an image change to both production jobs
+        id: guard
+        run: python3 .github/scripts/azure_release_guard.py plan-check "$RUNNER_TEMP/plan.json" infra/azure/image.auto.tfvars.json
+      - name: Record safe plan summary
+        env:
+          DECISION: ${{ steps.guard.outputs.decision }}
+        run: |
+          echo "Image deployment decision: $DECISION. Only the committed image digest can change." >> "$GITHUB_STEP_SUMMARY"
+      - name: Bind the pin to a release of merged code
+        # Runs from main, so a tagged branch cannot rewrite this check. A tag
+        # pushed on an unmerged commit, or a GHCR tag that no longer resolves to
+        # the pinned digest, never deploys (Renovate automerges pin PRs).
+        # load_pin in the guard step above already validated both values.
+        if: github.event_name == 'push' || inputs.operation == 'deploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r version image < <(python3 -c 'import json; p = json.load(open("infra/azure/image.auto.tfvars.json")); print(p["image_version"], p["image"])')
+          git fetch --quiet origin main "+refs/tags/v$version:refs/tags/v$version"
+          if ! git merge-base --is-ancestor "v$version^{commit}" origin/main; then
+            echo "::error::Release v$version is not a commit on main; refusing to deploy it."
+            exit 1
+          fi
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          tagged=$(docker buildx imagetools inspect "ghcr.io/dezoxy/jobs-fetcher:$version" --format '{{json .Manifest}}' | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"])')
+          if [ "ghcr.io/dezoxy/jobs-fetcher@$tagged" != "$image" ]; then
+            echo "::error::GHCR tag $version does not resolve to the pinned digest; refusing to deploy."
+            exit 1
+          fi
+          echo "Pin bound to release v$version on main." >> "$GITHUB_STEP_SUMMARY"
+      - name: Wait for idle jobs and a gap before the next schedule
+        if: steps.guard.outputs.decision == 'apply' && (github.event_name == 'push' || inputs.operation == 'deploy')
+        run: python3 .github/scripts/azure_release_guard.py wait-idle "$RUNNER_TEMP/plan.json" --margin-minutes 10
+      - name: Apply the saved image-only plan
+        if: steps.guard.outputs.decision == 'apply' && (github.event_name == 'push' || inputs.operation == 'deploy')
+        run: |
+          git fetch --quiet origin main
+          if ! git diff --quiet HEAD origin/main -- infra/azure/image.auto.tfvars.json; then
+            echo '::error::A newer image pin is on main; its own deployment run applies it.'
+            exit 1
+          fi
+          terraform -chdir=infra/azure apply -input=false deployment.tfplan
+      - name: Verify the live job images
+        if: github.event_name == 'push' || inputs.operation == 'deploy'
+        run: python3 .github/scripts/azure_release_guard.py verify-live "$RUNNER_TEMP/plan.json" infra/azure/image.auto.tfvars.json
+      - name: Remove local state and plan files
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/terraform-plan.log" \
+            infra/azure/deployment.tfplan infra/azure/production.auto.tfvars.json infra/azure/backend.hcl

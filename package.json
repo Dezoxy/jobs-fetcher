@@ -1,0 +1,24 @@
+{
+  "name": "jobs-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private job-search dashboard served from Cloudflare Workers static assets.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node scripts/validate.mjs tests/fixtures/jobs-2026-11-25.json",
+    "test": "node --test scripts/*.test.mjs scripts/v2/*.test.mjs src/*.test.mjs",
+    "fetch": "node scripts/fetch-sources.mjs",
+    "filter-browser": "node scripts/filter-browser.mjs",
+    "liveness": "node scripts/check-liveness.mjs",
+    "cloud": "node scripts/cloud-run.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "@azure/identity": "4.14.1",
+    "@azure/storage-blob": "12.34.0"
+  }
+}

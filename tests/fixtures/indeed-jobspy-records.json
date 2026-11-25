@@ -1,0 +1,73 @@
+[
+  {
+    "id": "in-03dbabc44a4b0866",
+    "site": "indeed",
+    "job_url": "https://hu.indeed.com/viewjob?jk=03dbabc44a4b0866",
+    "job_url_direct": "https://careers.example.com/jobs/123?utm_source=indeed",
+    "title": "DevOps Engineer",
+    "company": "Example Bank Zrt.",
+    "location": "Budapest, PE, Hungary",
+    "date_posted": "2026-11-24",
+    "job_type": "fulltime",
+    "salary_source": "direct_data",
+    "interval": "monthly",
+    "min_amount": 1400000.0,
+    "max_amount": 1950000.0,
+    "currency": "HUF",
+    "is_remote": false,
+    "description": "We run Kubernetes on Azure. Hybrid, Budapest office.",
+    "emails": NaN
+  },
+  {
+    "id": "in-f28c99b08a89eb8b",
+    "site": "indeed",
+    "job_url": "https://hu.indeed.com/viewjob?jk=f28c99b08a89eb8b&from=serp&tk=1abc&vjs=3",
+    "title": "Senior Cloud Architect",
+    "company": NaN,
+    "location": "Budapest, PE, Hungary",
+    "date_posted": NaN,
+    "job_type": "contract",
+    "salary_source": "direct_data",
+    "interval": "yearly",
+    "min_amount": 30000000.0,
+    "max_amount": NaN,
+    "currency": "HUF",
+    "is_remote": true,
+    "description": NaN
+  },
+  {
+    "id": "in-1ee9ccde228e00bd",
+    "site": "indeed",
+    "job_url": "https://hu.indeed.com/viewjob?jk=1ee9ccde228e00bd",
+    "title": "Platform Engineer",
+    "company": "EU Corp",
+    "location": "Üllő, PE, Hungary",
+    "date_posted": "2026-11-23",
+    "job_type": NaN,
+    "salary_source": "direct_data",
+    "interval": "yearly",
+    "min_amount": 60000.0,
+    "max_amount": 80000.0,
+    "currency": "EUR",
+    "is_remote": false,
+    "description": "Platform team."
+  },
+  {
+    "id": "in-50d78f6827155ef8",
+    "site": "indeed",
+    "job_url": "https://hu.indeed.com/viewjob?jk=50d78f6827155ef8",
+    "title": "   ",
+    "company": "No Title Kft.",
+    "location": "Budapest, PE, Hungary",
+    "date_posted": "2026-11-24",
+    "description": "A row JobSpy should never produce, kept to prove it is skipped."
+  },
+  {
+    "id": "in-not_a-key",
+    "site": "indeed",
+    "job_url": "https://example.com/not-indeed",
+    "title": "SRE",
+    "company": "Bad Key Ltd",
+    "location": "Hungary"
+  }
+]

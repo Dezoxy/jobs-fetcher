@@ -1,0 +1,5 @@
+resource_group_name  = "jobs-dashboard-terraform-westeurope"
+storage_account_name = "REPLACE_WITH_UNIQUE_BACKEND_NAME"
+container_name       = "terraform-state"
+key                  = "jobs-dashboard.tfstate"
+# use_azuread_auth=true is set in versions.tf. Operator login is the default.

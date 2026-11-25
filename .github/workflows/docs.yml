@@ -1,0 +1,31 @@
+name: Docs / Architecture model
+
+# Parses and inspects the Structurizr workspace in docs/architecture/ with the
+# image pinned in the Makefile, the same check as `make check` locally. The job
+# from Flodni's docs.yml that applies here; its consistency checker, Mermaid
+# and secret-scan jobs have no counterpart in this repository.
+on:
+  pull_request:
+    paths: ['docs/architecture/**', 'Makefile', '.github/workflows/docs.yml']
+  push:
+    branches: [main]
+    paths: ['docs/architecture/**', 'Makefile', '.github/workflows/docs.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model:
+    name: architecture model
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate and inspect the Structurizr workspace
+        run: make check

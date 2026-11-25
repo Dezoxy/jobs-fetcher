@@ -1,0 +1,74 @@
+{
+  // v2 (docs/architecture-v2.md): static UI from ./public, plus a small
+  // Worker for /data/* and /api/* that verifies the Access JWT itself,
+  // serves the job snapshot from SNAPSHOT KV,
+  // keeps the tracker in D1 and ingests LinkedIn alert e-mails.
+  // Deployed by Cloudflare Workers Builds on push to main.
+  //
+  // run_worker_first sends /data/* and /api/* through src/worker.js even
+  // when a matching asset exists; every other asset is served by the
+  // platform without running the script.
+  //
+  // Secrets (set with `wrangler secret put`, never committed):
+  //   OWNER_EMAILS      comma-separated owner e-mail(s) allowed in the browser
+  //   RUNNER_CLIENT_ID  Access service-token Client ID of the refresh runner
+  //                     (the JWT's common_name, including the ".access" suffix)
+  //
+  // Terraform boundary: this script is owned by Workers Builds.
+  // Terraform (the separate cloudflare repo) must NOT declare a
+  // cloudflare_workers_script for "jobs-dashboard" — it may only own
+  // the DNS record, the custom domain binding and the Access application.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jobs-dashboard",
+  "compatibility_date": "2026-07-01",
+  "main": "src/worker.js",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page",
+    "binding": "ASSETS",
+    "run_worker_first": ["/data/*", "/api/*"]
+  },
+  "vars": {
+    "ACCESS_TEAM": "toomhorvath.cloudflareaccess.com",
+    "ACCESS_AUD": "3465d4c316d7df67cfe34bc677103b9437517b3d094d5caf7746a419d6774d0e",
+    // log → a failed identity check is logged and the request continues;
+    // enforce → 403. Anything other than exactly "log" enforces. Cutover step 3
+    // (2026-11-24, after a week in log mode with no access_denied event).
+    "ACCESS_ENFORCE": "enforce"
+  },
+  "d1_databases": [
+    {
+      "binding": "JOBS_DB",
+      "database_name": "jobs-data",
+      "database_id": "5f419f86-7d5d-4985-b5aa-b238c97325b2",
+      "migrations_dir": "migrations/jobs"
+    },
+    {
+      "binding": "TRACKER_DB",
+      "database_name": "jobs-tracker",
+      "database_id": "f0e46999-c933-4b19-abf1-6df633f77b50",
+      "migrations_dir": "migrations/tracker"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      // v1 tracker blob: no longer read or written by the Worker; kept bound
+      // (read-only by convention) until cutover + 30 days as the import source.
+      "binding": "TRACKER",
+      "id": "51cd47b0a08e457abadcad48db9e7895"
+    },
+    {
+      // Snapshot written by the runner: keys jobs.json, last-run.json.
+      "binding": "SNAPSHOT",
+      "id": "584f970c1e8f47bdbb036612d2024183"
+    }
+  ],
+  // Only the Access-protected custom domain may serve this Worker. The
+  // default *.workers.dev and preview URLs bypass Access entirely: until
+  // 2026-11-24 they served jobs.json and the tracker to anyone.
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  }
+}

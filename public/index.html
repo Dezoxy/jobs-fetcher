@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Álláslista</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <h1>Álláslista</h1>
+    <span class="meta" id="meta">betöltés…</span>
+    <span id="syncState" class="dim"></span>
+    <button class="chip filtersBtn" id="filtersBtn" type="button" aria-expanded="false">Szűrők ▾</button>
+  </div>
+
+  <div class="controls">
+    <div class="grp" id="inboxGrp">
+      <button class="chip on" data-inbox="1">Feldolgozandó</button>
+      <button class="chip" data-inbox="0">Összes</button>
+    </div>
+    <input type="search" id="q" placeholder="Keresés: pozíció, cég, kulcsszó…" autocomplete="off">
+    <select id="cat"><option value="">Minden kategória</option></select>
+    <select id="sort">
+      <option value="mid-desc">Bér ↓</option>
+      <option value="mid-asc">Bér ↑</option>
+      <option value="new">Legfrissebb</option>
+      <option value="role">Pozíció A–Z</option>
+      <option value="company">Cég A–Z</option>
+      <option value="priority">Prioritás</option>
+    </select>
+  </div>
+
+  <div class="controls adv">
+    <div class="grp" id="stGrp">
+      <button class="chip on" data-st="all">Minden státusz</button>
+      <button class="chip" data-st="Mentett">Portálról mentett</button>
+      <button class="chip" data-st="Értesítő">Értesítőből</button>
+      <button class="chip" data-st="NFJ keresés">NFJ keresés</button>
+      <button class="chip" data-st="Indeed">Indeed</button>
+    </div>
+    <div class="grp" id="srcGrp">
+      <button class="chip on" data-src="all">Minden forrás</button>
+      <button class="chip" data-src="LinkedIn">LinkedIn</button>
+      <button class="chip" data-src="Profession">Profession</button>
+      <button class="chip" data-src="NoFluff">No Fluff</button>
+      <button class="chip" data-src="Indeed">Indeed</button>
+    </div>
+    <div class="grp">
+      <button class="chip" id="postedBtn">Csak hirdetett bér</button>
+      <button class="chip" id="freshBtn">Új (7 nap)</button>
+      <button class="chip on" id="archBtn">Archív elrejtése</button>
+      <button class="chip" id="priorityBtn">Csak prioritás</button>
+      <button class="chip" id="appliedBtn">Csak megpályázott</button>
+      <button class="chip" id="savedBtn">Csak elmentve</button>
+      <button class="chip on" id="hideIgnoredBtn">Nem érdekel elrejtése</button>
+    </div>
+  </div>
+</header>
+
+<details id="runNote" class="runNote" hidden>
+  <summary id="runNoteSummary"></summary>
+  <div id="runNoteBody"></div>
+</details>
+
+<main>
+  <details id="salaryDist" class="salaryDist">
+    <summary>Bér-eloszlás kategóriánként</summary>
+    <div id="distBody"></div>
+  </details>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Pozíció</th>
+        <th>Mi ez</th>
+        <th class="num">Bér / hó</th>
+        <th>Saját státusz</th>
+        <th class="colX"></th>
+      </tr>
+    </thead>
+    <tbody id="tb"></tbody>
+  </table>
+  <p id="empty" class="empty" hidden>Nincs a szűrőknek megfelelő találat.</p>
+</main>
+
+<footer>
+  <p><b>Státuszok.</b> <i>Mentett</i> — a portálon elmentetted. <i>Értesítőből</i> — a beállított értesítőid hozták fel, de nem mentetted el. <i>NFJ keresés</i> — a célprofil-alapú No Fluff Jobs keresés eredménye.</p>
+  <p><b>A bérek minősége eltér.</b> A zöld <span class="b-posted">HIRDETETT</span> jelölés azt jelenti, hogy a szám a hirdetésben szerepel. A szürke <span class="b-est">becslés</span> az NFJ Fizetési Iránytű 2026. I. félév sávjaiból származik, munkáltatótípus szerint korrigálva — állami/non-profit −20…−28%, kis hazai cég −8…−10%, hazai nagyvállalat és bank alapsáv, külföldi termékcég vagy remote-first +15…+30%, német nyelvű pozíció +15%. A becslés szűrési segédlet, nem tárgyalási alap.</p>
+  <p><b>Jogviszony.</b> A <i>Munkaviszony</i> sorok bruttó HUF/hó. A <i>B2B</i> sorok nettó számlázott HUF/hó.</p>
+  <p><b>Archív és lejárt.</b> Az a sor, amit a legutóbbi 14 napban egyik forrásban sem láttunk, archívnak számít — valószínűleg lejárt a hirdetés. A <i>lejárt</i> jelölésű sor hirdetését a frissítés ellenőrizte a portálon, és bizonyítottan már nem létezik — ez azonnal archívba kerül, mentett sorként is. Mindkettő alapból rejtve.</p>
+  <p class="dim">Az adatot a lokális gépen futó 6 óránkénti frissítés állítja elő, és git push viszi ki. A lista privát: Cloudflare Access védi.</p>
+  <p class="dim">Gyorsbillentyűk (asztali nézet): <b>j</b>/<b>k</b> — mozgás fel/le · <b>x</b> — Nem érdekel · <b>s</b> — Elmentve · <b>Enter</b> — hirdetés megnyitása új lapon.</p>
+  <p class="trackerIO">
+    <button class="chip" id="exportBtn" type="button">Exportálás</button>
+    <label class="chip fileChip">Importálás<input type="file" id="importInput" accept="application/json,.json" hidden></label>
+  </p>
+</footer>
+
+<div id="snackbar" class="snackbar" hidden>
+  <span id="snackbarMsg"></span>
+  <button class="chip" id="snackbarUndo" type="button">Visszavonás</button>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

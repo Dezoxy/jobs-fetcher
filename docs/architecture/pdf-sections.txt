@@ -1,0 +1,11 @@
+# Extra pages for the architecture PDF, after the ADRs and before the views.
+# One path per line, relative to this directory. Read by development-base's PDF
+# builder (scripts/build_architecture_pdf_source.py); this repository does not
+# vendor it.
+#
+# NORMALLY EMPTY, and empty here. Structurizr imports overview/ and nothing
+# else, so a path listed here is a page the PDF has and the Documentation tab
+# does not -- the two would describe the same system differently. Registers
+# reach both by being symlinked into overview/ as NN-name.md instead.
+#
+# Add a line here only to deliberately let the two renderings diverge.

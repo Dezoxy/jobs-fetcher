@@ -1,0 +1,30 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+backup_storage_account_name = "REPLACE_BACKUP_NAME"
+key_vault_name = "REPLACE_VAULT_NAME"
+backend_resource_group_name = "jobs-dashboard-terraform-westeurope"
+alert_email = "REPLACE_OWNER_EMAIL"
+ghcr_username = "Dezoxy"
+budget_start_date = "2026-10-01T00:00:00Z"
+monthly_budget = 5
+jobs_enabled = false
+schedules_enabled = false
+image = ""
+# Optional Claude API fallback: copy these into your reviewed app_env only after
+# federation and a workspace spend limit are configured. All five or none.
+# ANTHROPIC_FEDERATION_RULE_ID = "fdrl_REPLACE_WITH_RULE_ID"
+# ANTHROPIC_ORGANIZATION_ID = "REPLACE_WITH_CONSOLE_ORGANIZATION_UUID"
+# ANTHROPIC_SERVICE_ACCOUNT_ID = "svac_REPLACE_WITH_SERVICE_ACCOUNT_ID"
+# ANTHROPIC_FEDERATION_AUDIENCE = "api://REPLACE_WITH_AUDIENCE_APP_ID"
+# ANTHROPIC_FEDERATION_TENANT_ID = "REPLACE_WITH_ENTRA_TENANT_ID"
+# ANTHROPIC_WORKSPACE_ID = "wrkspc_REPLACE_WITH_WORKSPACE_ID" # optional for a single-workspace rule
+# JOBS_REFRESH_FALLBACK_MODELS = "claude-opus-5-5,claude-sonnet-5-5"
+# Names only. Values are copied separately into the dedicated vault.
+secret_names = {
+  GHCR_PULL_TOKEN = "jobs-ghcr-pull-token"
+  CLAUDE_CODE_OAUTH_TOKEN = "jobs-claude-oauth-token"
+  EMPLOYEE_CV_SSH_KEY = "jobs-employee-cv-deploy-key"
+  JOBS_TRACKER_CLIENT_ID = "jobs-tracker-client-id"
+  JOBS_TRACKER_CLIENT_SECRET = "jobs-tracker-client-secret"
+  TELEGRAM_BOT_TOKEN = "jobs-telegram-bot-token"
+  TELEGRAM_CHAT_ID = "jobs-telegram-chat-id"
+}

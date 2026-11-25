@@ -1,0 +1,74 @@
+name: Release refresh image
+on:
+  push:
+    tags: ['v*']
+  workflow_call:
+    inputs:
+      tag:
+        description: Version tag to publish
+        type: string
+        required: true
+    outputs:
+      image:
+        description: Published immutable GHCR image reference
+        value: ${{ jobs.release.outputs.image }}
+permissions:
+  contents: read
+  packages: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Require a version tag on merged code
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Read Node pin
+        id: versions
+        run: |
+          source runtime/versions.env
+          echo "node=$(echo "$NODE_IMAGE" | cut -d: -f2 | cut -d- -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+      - run: npm ci --ignore-scripts
+      - run: npm run check && npm test
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Build exact Linux release
+        # The source label links the GHCR package to this repo, so Renovate's
+        # app token can read the private tags and open the image-pin PR.
+        run: |
+          scripts/build-image.sh --tag "ghcr.io/dezoxy/jobs-fetcher:${RELEASE_TAG#v}" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+      - name: Log in to private GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Publish and record immutable digest
+        id: publish
+        run: |
+          image="ghcr.io/dezoxy/jobs-fetcher:${RELEASE_TAG#v}"
+          docker push "$image"
+          docker inspect --format '{{json .RepoDigests}}' "$image" > "$RUNNER_TEMP/repo-digests.json"
+          python3 - <<'PYTHON'
+          import json, os, re
+          from pathlib import Path
+          refs = json.loads(Path(os.environ['RUNNER_TEMP'], 'repo-digests.json').read_text())
+          images = [ref for ref in refs if re.fullmatch(r'ghcr\.io/dezoxy/jobs-fetcher@sha256:[0-9a-f]{64}', ref)]
+          if len(images) != 1:
+              raise SystemExit('Expected exactly one published dashboard digest.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'image={images[0]}\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'Published {os.environ["RELEASE_TAG"]}: `{images[0]}`\n')
+          PYTHON

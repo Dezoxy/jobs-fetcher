@@ -1,0 +1,22 @@
+node_modules/
+.wrangler/
+.cache/
+.dev.vars
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# Local Claude Code session config (browser preview launcher)
+.claude/
+
+# Azure operator configuration, remote-state cache, plans and private exports.
+infra/azure/.terraform/
+infra/azure/backend.hcl
+infra/azure/*.auto.tfvars
+infra/azure/production.auto.tfvars.json
+*.tfstate*
+*.tfplan
+cloud-private/
+__pycache__/

@@ -1,0 +1,53 @@
+name: Azure application
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Read tool pins
+        id: versions
+        run: |
+          source runtime/versions.env
+          echo "node=$(echo "$NODE_IMAGE" | cut -d: -f2 | cut -d- -f1)" >> "$GITHUB_OUTPUT"
+          echo "terraform=$TERRAFORM_VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Build Linux release image without credentials
+        run: scripts/build-image.sh --tag jobs-dashboard-ci
+      - name: Verify non-root image and pinned Claude without network
+        run: |
+          source runtime/versions.env
+          docker run --rm --network none --entrypoint bash \
+            --env EXPECTED_CLI="$CLAUDE_CLI_VERSION" jobs-dashboard-ci -c '
+              set -euo pipefail
+              test "$(id -u)" = 1000
+              test "$(claude --version)" = "$EXPECTED_CLI (Claude Code)"
+              node scripts/cloud-run.mjs --help
+              /opt/indeed/bin/python -I -c "import jobspy"
+              /opt/indeed/bin/python -I scripts/fetch-indeed.py --help
+            '
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra/azure
+      - run: terraform -chdir=infra/azure init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=infra/azure validate
+      - run: terraform -chdir=infra/azure test
+      - name: Check shell and documentation
+        run: |
+          shellcheck scripts/build-image.sh
+          node scripts/check-cloud-docs.mjs

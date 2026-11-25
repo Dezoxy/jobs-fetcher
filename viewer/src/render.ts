@@ -2,10 +2,10 @@
 // as markup, so names and descriptions from the workspace cannot inject HTML.
 
 import { BOUNDARY_LABEL, wrap, wrapClamped } from './layout.ts';
-import type { Placed, PlacedEdge, PlacedNode } from './layout.ts';
+import type { PlacedNode } from './layout.ts';
+import type { Frame, FrameEdge, FrameNode } from './tween.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
-const MARGIN = 40;
 
 function el<K extends keyof SVGElementTagNameMap>(
   tag: K, attrs: Record<string, string | number>, parent?: Element,
@@ -70,17 +70,20 @@ function shape(g: SVGGElement, p: PlacedNode) {
   }
 }
 
-function drawNode(layer: SVGGElement, p: PlacedNode) {
-  const g = el('g', { class: p.node.boundary ? 'boundary' : 'element', 'data-id': p.node.id }, layer);
+function drawNode(layer: SVGGElement, p: FrameNode) {
+  if (p.opacity <= 0) return;
+  const g = el('g', { class: p.node.boundary ? 'boundary' : 'element', 'data-id': p.node.id, opacity: p.opacity }, layer);
   shape(g, p);
+  if (p.textOpacity <= 0.05) return;
+  const label = el('g', { opacity: p.textOpacity }, g);
   const s = p.node.style;
   const fs = s.fontSize;
   if (p.node.boundary) {
     // Structurizr puts a boundary's name in its bottom-left corner.
     const tx = p.x + 30;
     const ty = p.y + p.height - BOUNDARY_LABEL + fs;
-    text(g, [p.node.name], tx, ty, fs, { 'font-weight': 'bold', fill: s.stroke, 'text-anchor': 'start' });
-    text(g, [p.node.caption], tx, ty + fs * 1.4, fs * 0.75, { fill: s.stroke, 'text-anchor': 'start' });
+    text(label, [p.node.name], tx, ty, fs, { 'font-weight': 'bold', fill: s.stroke, 'text-anchor': 'start' });
+    text(label, [p.node.caption], tx, ty + fs * 1.4, fs * 0.75, { fill: s.stroke, 'text-anchor': 'start' });
     return;
   }
   const cx = p.x + p.width / 2;
@@ -88,54 +91,89 @@ function drawNode(layer: SVGGElement, p: PlacedNode) {
   const name = wrap(p.node.name, chars);
   const desc = wrapClamped(p.node.description, Math.floor(p.width / (fs * 0.85 * 0.56)), 4);
   const top = s.shape === 'Person' ? p.y + p.height * 0.45 : p.y + p.height * 0.28;
-  text(g, name, cx, top, fs, { 'font-weight': 'bold', fill: s.color });
+  text(label, name, cx, top, fs, { 'font-weight': 'bold', fill: s.color });
   const capY = top + name.length * fs * 1.25;
-  text(g, [p.node.caption], cx, capY, fs * 0.7, { fill: s.color, opacity: 0.75 });
-  text(g, desc, cx, capY + fs * 1.4, fs * 0.85, { fill: s.color });
+  text(label, [p.node.caption], cx, capY, fs * 0.7, { fill: s.color, opacity: 0.75 });
+  text(label, desc, cx, capY + fs * 1.4, fs * 0.85, { fill: s.color });
 }
 
-function drawEdge(layer: SVGGElement, p: PlacedEdge, markerId: string) {
+/** The step being played: drawn in the accent colour, with a travelling dot. */
+export const ACCENT = '#e8590c';
+type Emphasis = 'normal' | 'current' | 'ghost';
+
+/** Past steps stay drawn, the current one stands out, future ones are ghosts. */
+export function emphasis(edgeStep: number | undefined, step: number | undefined): Emphasis {
+  if (step === undefined || edgeStep === undefined || edgeStep < step) return 'normal';
+  return edgeStep === step ? 'current' : 'ghost';
+}
+
+function drawEdge(layer: SVGGElement, p: FrameEdge, how: Emphasis, markerFor: (color: string) => string) {
+  const opacity = how === 'ghost' ? p.opacity * 0.12 : p.opacity;
+  if (opacity <= 0) return;
   const s = p.edge.style;
-  const g = el('g', { class: 'relationship', 'data-id': p.edge.id }, layer);
+  const color = how === 'current' ? ACCENT : s.color;
+  const width = how === 'current' ? s.thickness * 2.5 : s.thickness;
+  const g = el('g', { class: `relationship ${how}`, 'data-id': p.edge.id, opacity }, layer);
+  const points = p.points.map((pt) => `${pt.x},${pt.y}`).join(' ');
   el('polyline', {
-    points: p.points.map((pt) => `${pt.x},${pt.y}`).join(' '),
+    points,
     fill: 'none',
-    stroke: s.color,
-    'stroke-width': s.thickness,
-    'stroke-dasharray': s.dashed ? `${s.thickness * 6} ${s.thickness * 4}` : 'none',
-    'marker-end': `url(#${markerId})`,
+    stroke: color,
+    'stroke-width': width,
+    'stroke-dasharray': s.dashed && how !== 'current' ? `${width * 6} ${width * 4}` : 'none',
+    'marker-end': `url(#${markerFor(color)})`,
   }, g);
-  if (p.label) {
+  if (how === 'current') {
+    // A request travelling along the relationship, source to destination.
+    const dot = el('circle', { r: width * 3, fill: ACCENT }, g);
+    el('animateMotion', {
+      dur: '1.4s', repeatCount: 'indefinite', path: `M${points.replaceAll(' ', ' L')}`,
+    }, dot);
+  }
+  if (p.label && how !== 'ghost') {
     const fs = s.fontSize;
     el('rect', { x: p.label.x - 6, y: p.label.y - 4, width: p.label.width + 12, height: p.label.height + 8, fill: '#ffffff', opacity: 0.9 }, g);
-    text(g, p.label.lines, p.label.x + p.label.width / 2, p.label.y + fs, fs, { fill: s.color });
+    text(g, p.label.lines, p.label.x + p.label.width / 2, p.label.y + fs, fs, {
+      fill: color, 'font-weight': how === 'current' ? 'bold' : 'normal',
+    });
   }
 }
 
-export function renderScene(placed: Placed): SVGSVGElement {
+/** Draws one frame; `step` is the dynamic-view step being played, if any. */
+export function renderFrame(frame: Frame, step?: number): SVGSVGElement {
   const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', `${-MARGIN} ${-MARGIN} ${placed.width + 2 * MARGIN} ${placed.height + 2 * MARGIN}`);
+  const vb = frame.viewBox;
+  svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`);
   svg.setAttribute('font-family', 'system-ui, sans-serif');
 
-  // One arrowhead per relationship colour (marker fill cannot follow the line
-  // colour in every browser yet).
+  // One arrowhead per colour (marker fill cannot follow the line colour in
+  // every browser yet).
   const defs = el('defs', {}, svg);
   const markers = new Map<string, string>();
-  for (const color of new Set(placed.edges.map((p) => p.edge.style.color))) {
-    const id = `arrow-${markers.size}`;
-    markers.set(color, id);
-    const marker = el('marker', {
-      id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse',
-    }, defs);
-    el('path', { d: 'M0,0 L10,5 L0,10 z', fill: color }, marker);
-  }
+  const markerFor = (color: string) => {
+    let id = markers.get(color);
+    if (!id) {
+      id = `arrow-${markers.size}`;
+      markers.set(color, id);
+      const marker = el('marker', {
+        id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse',
+      }, defs);
+      el('path', { d: 'M0,0 L10,5 L0,10 z', fill: color }, marker);
+    }
+    return id;
+  };
 
-  // Boundaries first (outermost first), then elements, then relationships on top.
+  // Boundaries first (outermost first), then elements, then relationships on
+  // top, with the step being played last of all.
   const frames = el('g', { class: 'frames' }, svg);
   const shapes = el('g', { class: 'shapes' }, svg);
   const lines = el('g', { class: 'lines' }, svg);
-  [...placed.nodes].sort((a, b) => a.depth - b.depth)
+  [...frame.nodes].sort((a, b) => a.depth - b.depth)
     .forEach((p) => drawNode(p.node.boundary ? frames : shapes, p));
-  placed.edges.forEach((p) => drawEdge(lines, p, markers.get(p.edge.style.color) ?? ''));
+  const rank: Record<Emphasis, number> = { ghost: 0, normal: 1, current: 2 };
+  frame.edges
+    .map((p) => ({ p, how: emphasis(p.edge.step, step) }))
+    .sort((a, b) => rank[a.how] - rank[b.how])
+    .forEach(({ p, how }) => drawEdge(lines, p, how, markerFor));
   return svg;
 }

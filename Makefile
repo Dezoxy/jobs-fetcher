@@ -38,8 +38,9 @@ check: validate inspect
 view:
 	docker run --rm -p $(PORT):8080 -v "$(CURDIR)/$(ARCH_DIR):/usr/local/structurizr" $(STRUCTURIZR_IMAGE) local
 
-## viewer-workspace export the workspace as JSON for viewer/ (viewer/public/workspace.json)
+## viewer-workspace export the workspace as JSON for viewer/, with its presentation.yaml (into viewer/public/)
 viewer-workspace:
 	mkdir -p viewer/public
 	docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(ARCH_DIR):/w:ro" -v "$(CURDIR)/viewer/public:/out" \
 		$(STRUCTURIZR_IMAGE) export -workspace /w/workspace.dsl -format json -output /out
+	cp $(ARCH_DIR)/presentation.yaml viewer/public/presentation.yaml

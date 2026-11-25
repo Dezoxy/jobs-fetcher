@@ -2,3 +2,4 @@ node_modules/
 dist/
 # Generated from docs/architecture/ by `npm run workspace`; the DSL is the source.
 public/workspace.json
+public/presentation.yaml

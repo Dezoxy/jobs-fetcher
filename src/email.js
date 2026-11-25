@@ -3,7 +3,8 @@
 // The only thing kept from a message is the set of numeric LinkedIn job ids
 // it links to; they land in JOBS_DB.email_candidates and the next run fetches
 // each ad through the guest detail endpoint like any other candidate. The
-// body is never stored, forwarded or replied to.
+// body is never stored or replied to. When the FORWARD_TO secret is set,
+// worker.js forwards the untouched message to the owner's inbox.
 //
 // Trust: Email Routing evaluates SPF/DKIM/DMARC before invoking the Worker
 // and PREPENDS its own `Authentication-Results: mx.cloudflare.net; …` header

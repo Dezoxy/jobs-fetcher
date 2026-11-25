@@ -222,8 +222,9 @@ never committed.
    missing table), the Worker logs `email_store_failed` and drops the message.
    It never throws, because a throw would bounce the alert.
 
-A LinkedIn mail without job links is dropped silently. The body is never stored,
-forwarded or replied to.
+A LinkedIn mail without job links is not ingested. The body is never stored or
+replied to. When the `FORWARD_TO` Worker secret is set, every verified LinkedIn mail
+is then forwarded untouched to the owner's inbox ([ADR 6](architecture/decisions/0006-ingest-linkedin-alert-emails.md), step 5).
 
 ## Judge contract (`scripts/v2/judge.mjs`)
 

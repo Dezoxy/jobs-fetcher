@@ -40,7 +40,9 @@ reviewed operator plan and apply, never the automatic path.
 
 Option 2:
 
-1. A merge that changes the image's inputs runs `auto-release.yml`: the full
+1. A merge that changes the image's inputs runs `auto-release.yml`: after a
+   30-minute batch window that a newer merge restarts (amended 2026-11-25, so
+   a merge session produces one release and one deploy), the full
    validation workflow, then the next CalVer tag and its GitHub release
    ([ADR 7](0007-calendar-versioning.md)), then `release.yml` builds and pushes
    the image to private GHCR.

@@ -14,7 +14,7 @@ PORT     ?= 8080
 
 STRUCTURIZR := docker run --rm -v "$(CURDIR)/$(ARCH_DIR):/w:ro"
 
-.PHONY: help validate inspect check view
+.PHONY: help validate inspect check view viewer-workspace
 .DEFAULT_GOAL := help
 
 ## help            list the targets
@@ -37,3 +37,9 @@ check: validate inspect
 ## view            browse the workspace at http://localhost:8080/workspace/1 (PORT=... to change; Ctrl-C stops it)
 view:
 	docker run --rm -p $(PORT):8080 -v "$(CURDIR)/$(ARCH_DIR):/usr/local/structurizr" $(STRUCTURIZR_IMAGE) local
+
+## viewer-workspace export the workspace as JSON for viewer/ (viewer/public/workspace.json)
+viewer-workspace:
+	mkdir -p viewer/public
+	docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(ARCH_DIR):/w:ro" -v "$(CURDIR)/viewer/public:/out" \
+		$(STRUCTURIZR_IMAGE) export -workspace /w/workspace.dsl -format json -output /out

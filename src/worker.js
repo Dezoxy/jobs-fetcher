@@ -30,6 +30,10 @@ const SNAPSHOT_KEYS = new Map([
 const NO_STORE = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: NO_STORE });
 const log = (fields) => console.log(JSON.stringify(fields));
+// Error level is what Workers Issues detects (observability.issues in
+// wrangler.jsonc), and the account's Issues notification e-mails the owner.
+// Used only where an e-mail to the LinkedIn primary address could be lost.
+const logError = (fields) => console.error(JSON.stringify(fields));
 
 // Module scope = one JWKS cache per isolate, rebuilt only if the team changes.
 let keyStore = null;
@@ -165,7 +169,7 @@ export default {
     try {
       await ingestAlert(message, env);
     } catch (e) {
-      log({ event: "email_ingest_failed", error: redactAddresses(e) });
+      logError({ event: "email_ingest_failed", error: redactAddresses(e) });
     }
     await forwardCopy(message, env);
   },
@@ -176,14 +180,14 @@ export default {
 async function forwardCopy(message, env) {
   if (!env.FORWARD_TO) return;
   if (message.canBeForwarded === false) {
-    log({ event: "email_forward_skipped", reason: "not_forwardable" });
+    logError({ event: "email_forward_skipped", reason: "not_forwardable" });
     return;
   }
   try {
     await message.forward(env.FORWARD_TO);
     log({ event: "email_forwarded" });
   } catch (e) {
-    log({ event: "email_forward_failed", error: redactAddresses(e) });
+    logError({ event: "email_forward_failed", error: redactAddresses(e) });
   }
 }
 
@@ -194,7 +198,7 @@ const redactAddresses = (e) =>
 
 // Called only for verified LinkedIn mail.
 async function ingestAlert(message, env) {
-  const { text, truncated } = await readCapped(message.raw, MAX_EMAIL_BYTES);
+  const { text, truncated } = await readCapped(message.raw, MAX_EMAIL_BYTES, { drain: true });
   const ids = extractLinkedInJobIds(text);
   if (ids.length === 0) {
     // A genuine LinkedIn mail without job links (e.g. a notice): nothing to
@@ -209,7 +213,7 @@ async function ingestAlert(message, env) {
       .run();
   } catch (e) {
     // Never throw from here: a throw bounces the alert back to LinkedIn.
-    log({ event: "email_store_failed", ids: ids.length, error: String(e?.message ?? e).slice(0, 200) });
+    logError({ event: "email_store_failed", ids: ids.length, error: String(e?.message ?? e).slice(0, 200) });
     return;
   }
   log({ event: "email_ingested", ids: ids.length, inserted: res?.meta?.changes ?? null, truncated });

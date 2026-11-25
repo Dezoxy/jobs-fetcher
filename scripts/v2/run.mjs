@@ -46,6 +46,8 @@ const MIN_LINKEDIN_ROWS = 15;
 const DECIDED = new Set(['seen', 'added', 'repost', 'fit', 'dedupe', 'ledgered', 'url-conflict']);
 
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+// The image's release (Dockerfile ENGINE_VERSION): CalVer, or "dev" for CI builds.
+export const ENGINE_VERSION = /^(?:\d{4}\.\d{1,2}\.\d{1,4}|dev)$/;
 
 // The most recent daily 13:00 UTC slot (same rule as cloud-run.mjs scheduleSlot).
 export function scheduleSlot(now = new Date()) {
@@ -176,6 +178,9 @@ export async function runRefresh({ cf, deps, now = new Date(), env = {}, log = c
   }
   const runNote = { ranAt, summary, warnings: warnings.slice(0, 30) };
   if (result.cleanedDeadIds.length) runNote.cleanedDeadIds = result.cleanedDeadIds;
+  // The site footer shows which engine made this list. Unset or malformed
+  // (a hand-built image) is left out rather than published.
+  if (ENGINE_VERSION.test(env.ENGINE_VERSION ?? '')) runNote.engineVersion = env.ENGINE_VERSION;
   const snapshot = renderSnapshot(result.jobs, ranAt);
 
   // ---- 9. validate exactly what will be published

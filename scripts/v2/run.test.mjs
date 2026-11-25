@@ -153,6 +153,16 @@ test('removing exactly the limit is allowed, with cleanedDeadIds in the note', o
   } finally { cf.cleanup(); }
 });
 
+test('the run note carries the image\'s engineVersion; a malformed or missing one is left out', opts, async () => {
+  for (const [ENGINE_VERSION, want] of [['2026.11.3', '2026.11.3'], ['dev', 'dev'], ['v2026.11.3', undefined], [undefined, undefined]]) {
+    const cf = await seeded();
+    try {
+      assert.equal(await runRefresh({ cf, deps: deps(), now: NOW, env: { ENGINE_VERSION }, log: quiet }), EXIT.OK);
+      assert.equal(JSON.parse(cf.kv.get('last-run.json')).engineVersion, want, String(ENGINE_VERSION));
+    } finally { cf.cleanup(); }
+  }
+});
+
 test('removal guard: an all-dead sweep over today\'s real jobs.json is refused; old archived rows do not dilute it', async () => {
   const { merge } = await import('./merge.mjs');
   const real = JSON.parse(fs.readFileSync(new URL('../../tests/fixtures/jobs-2026-11-25.json', import.meta.url), 'utf8')).jobs;

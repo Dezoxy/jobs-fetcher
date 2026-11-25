@@ -67,6 +67,7 @@ Cloudflare Worker jobs-dashboard (behind Access; workers.dev and previews disabl
   every request: verify Cf-Access-Jwt-Assertion (RS256, iss, aud, exp)
   GET /data/jobs.json, /data/last-run.json   SNAPSHOT KV
                                              (missing key → 503, logs snapshot_missing)
+  GET /data/version.json                     { web: { commit, deployedAt } } (footer)
   GET/PUT /api/tracker                       TRACKER_DB, same JSON contract as v1
   email()                                    LinkedIn alert → JOBS_DB.email_candidates
 ```

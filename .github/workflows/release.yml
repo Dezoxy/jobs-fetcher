@@ -47,6 +47,7 @@ jobs:
         # app token can read the private tags and open the image-pin PR.
         run: |
           scripts/build-image.sh --tag "ghcr.io/dezoxy/jobs-fetcher:${RELEASE_TAG#v}" \
+            --build-arg "ENGINE_VERSION=${RELEASE_TAG#v}" \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
       - name: Log in to private GHCR
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4

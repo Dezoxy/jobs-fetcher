@@ -580,6 +580,21 @@ describe("worker.fetch", () => {
     assert.equal((await put({ "Content-Type": "application/json" })).status, 200, "no Origin header (non-browser) is fine");
   });
 
+  test("/data/version.json: the deployed commit and time, behind Access, never cached", async () => {
+    const meta = { id: "0b1c2d3e-0000-4000-8000-000000000000", tag: "a1b2c3d", timestamp: "2026-11-25T14:05:00.000Z" };
+    const env = baseEnv({ CF_VERSION_METADATA: meta });
+    assert.equal((await call(env, "/data/version.json")).status, 403);
+    const r = await call(env, "/data/version.json", { token: await ownerToken() });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await r.json(), { web: { commit: "a1b2c3d", deployedAt: "2026-11-25T14:05:00.000Z" } });
+    // Unbound (wrangler dev) or a tag that is not a commit: nulls, never echoed.
+    const bare = await call(baseEnv(), "/data/version.json", { token: await ownerToken() });
+    assert.deepEqual(await bare.json(), { web: { commit: null, deployedAt: null } });
+    const odd = await call(baseEnv({ CF_VERSION_METADATA: { ...meta, tag: "<b>x</b>" } }), "/data/version.json", { token: await ownerToken() });
+    assert.equal((await odd.json()).web.commit, null);
+  });
+
   test("PUT keeps the v1 error contract", async () => {
     const env = baseEnv();
     const token = await ownerToken();

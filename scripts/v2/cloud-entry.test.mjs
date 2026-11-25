@@ -63,6 +63,10 @@ test('cloud-run backup exports D1 into the backup container, with the operator l
   assert.deepEqual(seen, [false, true]);
 });
 
+test('v2Env passes the image\'s ENGINE_VERSION through to the run note', () => {
+  assert.equal(v2Env({ ENGINE_VERSION: '2026.11.3' }).ENGINE_VERSION, '2026.11.3');
+});
+
 test('v2Env is an allowlist', () => {
   assert.deepEqual(Object.keys(v2Env({ PATH: '/bin', CLOUDFLARE_API_TOKEN: 'x', EMPLOYEE_CV_SSH_KEY: 'k', RANDOM: 'r' })).sort(), ['CLOUDFLARE_API_TOKEN', 'PATH']);
 });

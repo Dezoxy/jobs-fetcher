@@ -20,12 +20,26 @@ const job = (over = {}) => ({
 const indeed = (over = {}) => job({ id: "in-03dbabc44a4b0866", source: "Indeed", status: "Indeed",
   url: "https://hu.indeed.com/viewjob?jk=03dbabc44a4b0866", ...over });
 
-function validate(jobs) {
+function validate(jobs, runNote) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-"));
   const file = path.join(dir, "jobs.json");
   fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, generatedAt: "2026-11-25T13:00:00Z", jobs }));
+  if (runNote) fs.writeFileSync(path.join(dir, "last-run.json"), JSON.stringify(runNote));
   return spawnSync(process.execPath, [VALIDATE, file], { encoding: "utf8" });
 }
+
+test("engineVersion in the run note: absent, a release or dev passes; anything else fails", () => {
+  const note = (over) => ({ ranAt: "2026-11-25T13:00:00Z", summary: "ok", warnings: [], ...over });
+  for (const engineVersion of [undefined, "2026.11.3", "dev"]) {
+    const run = validate([job()], note({ engineVersion }));
+    assert.equal(run.status, 0, `${engineVersion}: ${run.stderr}`);
+  }
+  for (const engineVersion of ["v2026.11.3", "2026.11", "latest", "", 202611, "2026.11.3<b>"]) {
+    const run = validate([job()], note({ engineVersion }));
+    assert.equal(run.status, 1, String(engineVersion));
+    assert.match(run.stderr, /"engineVersion" must be/);
+  }
+});
 
 test("accepts an Indeed row and a flagged repost; null repostOf is absent", () => {
   const run = validate([job({ repostOf: null }), indeed({ repostOf: "li-4441024544" })]);

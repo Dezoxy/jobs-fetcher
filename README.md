@@ -178,9 +178,12 @@ The message names the companies you are looking at. Telegram cloud chats are not
   "ranAt": "2026-07-28T16:30:00+02:00",
   "summary": "plain Hungarian text, max ~1200 chars — no HTML, no Markdown",
   "warnings": ["optional, one string per problem"],
-  "cleanedDeadIds": ["pr-2936905", "…ids the run deleted on purpose, or omit"]
+  "cleanedDeadIds": ["pr-2936905", "…ids the run deleted on purpose, or omit"],
+  "engineVersion": "2026.11.3"
 }
 ```
+
+`engineVersion` is the image release that made the run (`ENGINE_VERSION`, set by `release.yml`). The footer's last line shows it as "Motor", next to "Weboldal": the deployed Worker's commit from `GET /data/version.json` (`version_metadata`, tagged by `scripts/cf-deploy.sh`).
 
 `cleanedDeadIds` exists so the notifier can tell a deliberate deletion from data loss. The task deletes confirmed-dead `Értesítő`/`NFJ keresés` rows (see `scripts/check-liveness.mjs`); everything else is supposed to stay put and age into the archive. The diff subtracts these ids from the rows that vanished and reports the rest as unexpected — so the "eltűnt a fájlból" warning only fires when something genuinely went missing.
 
@@ -222,7 +225,7 @@ npm run dev       # wrangler dev, serves ./public
 
 ## Deployment
 
-Push to `main`. Workers Builds does the rest. There is no build step — the assets are served as-is.
+Push to `main`. Workers Builds does the rest with `bash scripts/cf-deploy.sh`, which tags the version with the short commit. There is no build step — the assets are served as-is.
 
 Manual fallback if Workers Builds is unavailable: `npx wrangler deploy` with a Cloudflare API token that has Workers Scripts:Edit.
 
